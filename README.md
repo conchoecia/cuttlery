@@ -10,7 +10,7 @@ Codon usage table tool for python
    - The fasta file of known genes without COIII
      for the test is: `Bf_all_noCOIII.fasta`
 - There is one set of known genes
- - `knownCDS.fasta`
+   - `knownCDS.fasta`
 - There are two sets of null hypothesis fasta files
- - `Bf_nc_rev.fasta` is the noncoding regions on the antisense strand (probably not transcribed)
- - `Bf_nc_fwd.fasta` is the noncoding regions on the sense strand (transcribed)
+   - `Bf_nc_rev.fasta` is the noncoding regions on the antisense strand (probably not transcribed)
+   - `Bf_nc_fwd.fasta` is the noncoding regions on the sense strand (transcribed)
