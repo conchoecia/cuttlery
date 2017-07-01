@@ -2,8 +2,7 @@
 """
 Created on Thu Jun  1 14:54:48 2017
 
-@author: Jordan
-@contributor: DTS
+@author: Jordan/DTS
 """
 
 import collections
@@ -14,6 +13,7 @@ from Bio import SeqIO
 from builtins import range
 import progressbar
 import numpy as np
+from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix as cmcalc
 
 
@@ -71,12 +71,9 @@ def interpret_hypothesis_test(log_likelihood_ratio):
     return favored
 
 def dirichlet_log_marginal_likelihood(counts_test, counts_background, pseudocounts):
-    # it is necessary to remove the starts and stops to avoid the analysis just
-    #  being based on their binary presence/absence
     #print(counts_test)
     #print(counts_background)
-    precodons = ["".join(codon) for codon in itertools.product(nts, repeat = 3)]
-    codons = [x for x in precodons if x not in startsstops]
+    codons = ["".join(codon) for codon in itertools.product(nts, repeat = 3)]
     log_like = 0
     log_like += math.lgamma(sum(counts_test[codon] for codon in codons))
     log_like += math.lgamma(sum(pseudocounts + counts_background[codon] for codon in codons))
@@ -87,12 +84,30 @@ def dirichlet_log_marginal_likelihood(counts_test, counts_background, pseudocoun
         log_like += math.lgamma(pseudocounts + counts_background[codon] + counts_test[codon])
     return log_like
 
-def remove_starts_stops(seq):
-    seq1 = [test_seq[i:i+3] for i in
+#def remove_starts_stops(seq):
+#    seq1 = [test_seq[i:i+3] for i in
+
+def gen_codons(seq, codon_filtering):
+    codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
+    new_codons = codons
+    if codon_filtering == 1:
+        if codons[0] in starts:
+            new_codons = new_codons[1:]
+        if codons[-1] in stops:
+            new_codons = new_codons[0:-1]
+    elif codon_filtering == 2:
+        if codons[0] in starts:
+            new_codons = new_codons[1:]
+        new_codons = [x for x in new_codons if x not in stops]
+    elif codon_filtering == 3:
+        new_codons = [x for x in codons if x not in starts + stops]
+    return new_codons
+
+
 # arguments are one test sequence and two lists of sequences representing the two hypothesis groups
 # pseudocounts are added to each codon
 # verbose flag toggles whether test will be interpreted for you on stdout
-def codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.5, verbose = True): 
+def codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.5, verbose = True, codon_filtering = True): 
     # check for data invariants
     assert len(test_seq) % 3 == 0
     for nt in test_seq:
@@ -111,16 +126,16 @@ def codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudoc
     codon_counts_2 = collections.Counter()
     codon_counts_test = collections.Counter()
 
-    for i in range(int(len(test_seq) / 3)):
-        codon_counts_test[test_seq[i:i+3]] += 1
+    for codon in gen_codons(test_seq, codon_filtering):
+        codon_counts_test[codon] += 1
 
     for seq in seq_set_1:
-        for i in range(int(len(seq) / 3)):
-            codon_counts_1[seq[i:i+3]] += 1
+        for codon in gen_codons(seq, codon_filtering):
+            codon_counts_1[codon] += 1
 
     for seq in seq_set_2:
-        for i in range(int(len(seq) / 3)):
-            codon_counts_2[seq[i:i+3]] += 1
+        for codon in gen_codons(seq, codon_filtering):
+            codon_counts_2[codon] += 1
 
     # compute bayes factor
     log_likelihood_ratio = dirichlet_log_marginal_likelihood(codon_counts_test, codon_counts_1, pseudocounts) \
@@ -164,7 +179,7 @@ def gen_codings(c_fasta_filepath, seqs_per_set):
     grouped_seqs = [seqs[i:i+seqs_per_set] for i in range(0,len(seqs),seqs_per_set)]
     return grouped_seqs
 
-def confusion_matrix(coding_sets, noncoding_sets, seqs_per_set):
+def confusion_matrix(coding_sets, noncoding_sets, seqs_per_set, codon_filtering):
     #first, test all the trues. Generate a list of all combinations of noncoding
     # and for each combination iterate through all of the groups of coding, and for each
     # set of coding remove one and test the other against everything else.
@@ -172,13 +187,14 @@ def confusion_matrix(coding_sets, noncoding_sets, seqs_per_set):
 
     real_val = []
     observed = []
+    llratio = []
     # This makes all the possible products of noncoding_sets
     possible_indices = [list(range(len(x))) for x in noncoding_sets]
     nc_comb_list = list(itertools.product(*possible_indices))
     bar = progressbar.ProgressBar()
     seq_sets = set()
     for bari in bar(range(len(nc_comb_list))):
-    #for bari in bar(range(2)):
+    #for bari in bar(range(100)):
         each = nc_comb_list[bari]
         for i in range(len(coding_sets)):
             for j in range(seqs_per_set):
@@ -193,7 +209,8 @@ def confusion_matrix(coding_sets, noncoding_sets, seqs_per_set):
                 seq_set_2 = [noncoding_sets[k][each[k]]for k in range(len(each))]
                 seq_sets.update(seq_set_1)
                 #print (seq_set_2)
-                log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.1, verbose = False)
+                log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.1, verbose = False, codon_filtering = codon_filtering)
+                llratio.append(log_likelihood_ratio)
                 if log_likelihood_ratio < 0:
                     favored = 2
                 else:
@@ -236,6 +253,7 @@ def confusion_matrix(coding_sets, noncoding_sets, seqs_per_set):
     # use all the coding sequences
     seq_set_1 = [seq for l in coding_sets for seq in l]
     for neg_index in bar2(range(len(test_list))):
+    #for neg_index in bar2(range(2000)):
         analysis = test_list[neg_index]
         i,j = analysis[0]
         test_dict = analysis[1]
@@ -245,17 +263,39 @@ def confusion_matrix(coding_sets, noncoding_sets, seqs_per_set):
         test_seq = noncoding_sets[i][j]
         # the false set is the noncoding genes in index each
         seq_set_2 = [noncoding_sets[key][test_dict[key]] for key in test_dict]
-        log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.5, verbose = False)
+        log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.5, verbose = False, codon_filtering = codon_filtering)
+        llratio.append(log_likelihood_ratio)
         if log_likelihood_ratio < 0:
             favored = 2
         else:
             favored = 1
         observed.append(favored)
 
-    real_val
-    observed
     matrix = cmcalc(real_val, observed)
+    np.save("llratio", np.array(llratio))
+    np.save("real_val", np.array(real_val))
+    np.save("observed", np.array(observed))
     print(matrix)
+
+def plot_ratios():
+    llratio_list = np.load("llratio.npy")
+    true_value_list = np.load("real_val.npy")
+    obs_value_list  = np.load("observed.npy")
+    llratios_1 = [llratio_list[i] for i in range(len(true_value_list)) if true_value_list[i] == 1]
+    llratios_2 = [llratio_list[i] for i in range(len(true_value_list)) if true_value_list[i] == 2]
+
+    llratios_1weights = 100 * np.ones_like(llratios_1) / llratios_1.size
+    llratios_2weights = 100 * np.ones_like(llratios_2) / llratios_2.size
+
+    fig, ax = plt.subplots()
+    #ax.hist(llratios_1, bins='auto', weights=llratios_1weights, color='lightblue', alpha=0.5, normed=True)
+    #ax.hist(llratios_2, bins='auto', weights=llratios_2weights, color='salmon', alpha=0.5, normed=True)
+    ax.hist(llratios_1, bins='auto', color='lightblue', alpha=0.5, normed=True)
+    ax.hist(llratios_2, bins='auto', color='salmon', alpha=0.5, normed=True)
+    ax.set(title='Histogram Comparison', ylabel='% of Dataset in Bin')
+    ax.margins(0.05)
+    ax.set_ylim(bottom=0)
+    plt.show()
 
 def main():
     #first generate a string of the sequence to test
@@ -269,8 +309,16 @@ def main():
     #  sequences to add in each sublist.
     seq_set_2 = gen_noncodings("nc_seqs_gt50_bothind.fasta", seqs_per_group)
 
-    confusion_matrix(seq_set_1, seq_set_2, seqs_per_group)
+    #print("confusion matrix without removing starts and stops (codon_filtering = 0)")
+    #confusion_matrix(seq_set_1, seq_set_2, seqs_per_group, 0)
+    #print("confusion matrix with removing starts and stops (codon_filtering = 1)")
+    #confusion_matrix(seq_set_1, seq_set_2, seqs_per_group, 1)
+    print("confusion matrix with removing starts from beginning and stops from the end and internally (codon_filtering = 2)")
+    confusion_matrix(seq_set_1, seq_set_2, seqs_per_group, 2)
+    #print("confusion matrix with removing all starts and stops from all positions (codon_filtering = 3)")
+    #confusion_matrix(seq_set_1, seq_set_2, seqs_per_group, 3)
     #codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.5, verbose = True)
+    #plot_ratios()
 
 if __name__ == "__main__":
     sys.exit(main())
