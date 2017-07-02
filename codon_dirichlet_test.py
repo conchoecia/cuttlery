@@ -3,6 +3,7 @@
 Created on Thu Jun  1 14:54:48 2017
 
 @author: Jordan/DTS
+#info about confusion matrix here: http://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/
 """
 
 import collections
