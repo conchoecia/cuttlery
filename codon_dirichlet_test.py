@@ -286,6 +286,19 @@ def confusion_matrix(coding_sets, nc_seqsets, seqs_per_set, codon_filtering):
     np.save("real_val", np.array(real_val))
     np.save("observed", np.array(observed))
     print(matrix)
+    
+# estimates the power and false positive rate for the test based on a set of
+# simulated positive and negative results
+# takes the log likelihood of a test, a list of log likelihoods from leave-one-out
+# positive simulations, and a list of log likelihoods leave-one-out negative 
+# simulations as inputs
+def estimate_power_and_false_pos(log_likelihood_score, positive_simulations,
+                                 negative_simulations):
+    
+    false_pos = np.mean(np.greater(negative_simulations, log_likelihood_score))
+    power = np.mean(np.greater(positive_simulations, log_likelihood_score))
+    return false_pos, power
+    
 
 def plot_ratios(test_seq_names):
     llratio_list = np.load("llratio.npy")
