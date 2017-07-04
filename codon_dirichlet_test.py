@@ -298,6 +298,42 @@ def estimate_power_and_false_pos(log_likelihood_score, positive_simulations,
     false_pos = np.mean(np.greater(negative_simulations, log_likelihood_score))
     power = np.mean(np.greater(positive_simulations, log_likelihood_score))
     return false_pos, power
+
+def estimate_power_and_false_pos_from_distr(log_likelihood_scores,
+                                            positive_simulations,
+                                            negative_simulations):
+    
+    np.sort(log_likelihood_scores)
+    np.sort(positive_simulations)
+    np.sort(negative_simulations)
+    
+    pos_num = float(len(positive_simulations))
+    neg_num = float(len(negative_simulations))
+    
+    j = 0
+    k = 0
+    
+    total_power = 0.0
+    total_false_pos = 0.0
+    
+    for i in range(len(log_likelihood_scores)):
+        if j < len(positive_simulations):
+            while positive_simulations[j] < log_likelihood_scores[i]:
+                j += 1
+                if j == len(positive_simulations):
+                    break
+        if k < len(negative_simulations):
+            while negative_simulations[k] < log_likelihood_scores[i]:
+                k += 1
+                if k == len(negative_simulations):
+                    break
+        
+        total_power += 1.0 - j / pos_num
+        total_false_pos += 1.0 - k / neg_num
+    
+    power = total_power / len(log_likelihood_scores)
+    false_pos = total_false_pos / len(log_likelihood_scores)
+    return false_pos, power
     
 
 def plot_ratios(test_seq_names):
