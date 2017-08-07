@@ -15,6 +15,7 @@ import argparse
 import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
+from matplotlib import cm
 import matplotlib.patches as mplpatches
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.path import Path
@@ -514,7 +515,7 @@ def main():
                 all_results.append([results])
 
                 #now we run a bunch of simulations and chop them up into blocks of 100
-                numSimulations = 100000
+                numSimulations = 100
                 chunk_size = 10
                 #if method == 'ML':
                 #    numSimulations = int(numSimulations / 10)
@@ -529,28 +530,99 @@ def main():
                 all_results.append(flat_results)
 
         all_flat = [item for sublist in all_results for item in sublist]
-        print(all_flat)
         results_df = pd.DataFrame.from_dict(all_flat)
         results_df.to_csv(results_file)
     else:
         print("found {} so skipping analysis".format(results_file))
         results_df = pd.read_csv(results_file)
 
-    ## plot normed histogram
-    #plt.hist(piNpiS, bins=100, normed=True)
-    ## find minimum and maximum of xticks, so we know
-    ## where we should compute theoretical distribution
-    #xt = plt.xticks()[0]
-    #xmin, xmax = min(xt), max(xt)
-    #lnspc = np.linspace(xmin, xmax, len(piNpiS))
-    ## exactly same as above
-    #ag,bg,cg = stats.gamma.fit(piNpiS, loc=0)
-    #print(ag, bg, cg)
-    #pdf_gamma = stats.gamma.pdf(lnspc, ag, bg,cg)
-    #print(pdf_gamma)
-    #plt.plot(lnspc, pdf_gamma, label="Gamma")
-    #plt.xlim([0,10])
-    #plt.show()
+    plot_results(results_df)
+
+def plot_results(results):
+    sims = results[results['type'] == 'simulation']
+    obs = results[results['type'] == 'observed']
+    obs.sort_values(by="piNpiS", ascending = False, inplace=True)
+    obs.reset_index(inplace=True)
+    obs.drop('Unnamed: 0', 1, inplace=True)
+    obs.drop('index', 1, inplace=True)
+
+    seqnames = results['seqname'].unique()
+
+    for this_seqname in seqnames:
+        observed_value = obs.loc[obs['seqname'] == this_seqname,'piNpiS']
+        observations =  sims.loc[sims['seqname'] == this_seqname, ]
+        num_observations = len(observations)
+        min_piNpiS = np.min(observations['piNpiS'])
+        num_ltet = len(observations.query("piNpiS <= {} and piNpiS > 0".format(float(observed_value))))
+        p_val = num_ltet/num_observations
+        #print("{} observed: {}, min: {}, #ltet: {}, #obs: {}".format(this_seqname,
+        #       float(observed_value), min_piNpiS, num_ltet, num_observations))
+        print("pvalue of {}: {}".format(this_seqname, p_val))
+
+    #randomly sample because there are probably too many points to plot
+    sims = sims.sample(frac=0.4, replace=False)
+
+    cmap = cm.get_cmap('viridis')
+    rgba = {seqnames[i]: cmap(i/len(seqnames))
+            for i in range(len(seqnames)) }
+    markers = {"observed": 'o', "simulation": "*"}
+    sizes = {"observed": 3, "simulation": 1}
+
+    plt.style.use('BME163')
+
+    #set the figure dimensions
+    figWidth = 5
+    figHeight = 5
+    plt.figure(figsize=(figWidth,figHeight))
+
+    #set the panel dimensions
+    panelWidth = 4
+    panelHeight = 2.5
+
+    #find the margins to center the panel in figure
+    leftMargin = (figWidth - panelWidth)/2
+    bottomMargin = ((figHeight - panelHeight)/2) + 0.25
+
+    panel0=plt.axes([leftMargin/figWidth, #left
+                     bottomMargin/figHeight,    #bottom
+                     panelWidth/figWidth,   #width
+                     panelHeight/figHeight])     #height
+    panel0.tick_params(axis='both',which='both',\
+                       bottom='on', labelbottom='on',\
+                       left='on', labelleft='on', \
+                       right='off', labelright='off',\
+                       top='off', labeltop='off') 
+
+    #panel0.set_xlim([min(results['pi'])*0.9, max(results['pi'])*1.1])
+    panel0.set_xlim([0, max(results['pi'])*1.1])
+    #panel0.set_ylim([0, max(results['piNpiS']) * 0.5])
+    panel0.set_ylim([0, 2])
+
+    #panel0.set_yscale('log')
+    panel0.scatter(sims['pi'], sims['piNpiS'],
+                   marker = 'o',
+                   alpha = 0.01,
+                   s = 3, #results['type'].apply(lambda x: sizes[x]),
+                   c = sims['seqname'].apply(lambda x: rgba[x]))
+    panel0.scatter(obs['pi'], obs['piNpiS'],
+                   marker = 'X',
+                   #alpha = 0.1,
+                   s = 200, lw = 0,
+                   c = obs['seqname'].apply(lambda x: rgba[x]))
+
+    for i in range(0, 3):
+        panel0.text(obs.loc[i,'pi'] - 0.00075, obs.loc[i, 'piNpiS'],
+                    obs.loc[i, 'seqname'],
+                    fontsize = 12,
+                    ha='right', va='bottom',
+                    color = 'black')
+
+    panel0.set_ylabel("piN/piS")
+    panel0.set_xlabel("pi")
+    panel0.set_title("Simulated mutations pi and piN/piS")
+    #counts = generate_heat_map(panel0, results, purple1)
+
+    plt.savefig("simulation_results.png", dpi=600, transparent=False)
 
 if __name__ == "__main__":
     sys.exit(main())
