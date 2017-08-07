@@ -98,7 +98,19 @@ def parse_arguments():
                         required = True,
                         help = """The results will be written to this file as a
                         csv.""")
-
+    parser.add_argument("--method",
+                        required = True,
+                        choices = ['NG86', 'LWL85', 'YN00', 'ML'],
+                        help = """the method to use in the simulation""")
+    parser.add_argument("--numsims",
+                        required = True,
+                        type = int,
+                        help = """the results will be written to this file as a
+                        csv.""")
+    parser.add_argument("--threads",
+                        required = False,
+                        type = int,
+                        help = """The num threads to attempt to use.""")
 
     args = parser.parse_args()
     return args
@@ -503,31 +515,31 @@ def main():
 
             #methods = ['NG86', 'LWL85', 'YN00', 'ML']
             #methods = ['NG86', 'LWL85', 'ML']
-            methods = ['NG86']
+            method = options.method
             print("processing: {}".format(genename))
             #parallelized for loop goes here
-            for method in methods:
-                # first we calculate the real information about these data
-                results = calculate_piN_piS(codonseqs, method, codon_table)
-                results['pi'] = calculate_pi(codonseqs)
-                results['seqname'] = genename
-                results['type'] = "observed"
-                all_results.append([results])
+            # first we calculate the real information about these data
+            results = calculate_piN_piS(codonseqs, method, codon_table)
+            results['pi'] = calculate_pi(codonseqs)
+            results['seqname'] = genename
+            results['type'] = "observed"
+            all_results.append([results])
 
-                #now we run a bunch of simulations and chop them up into blocks of 100
-                numSimulations = 100
-                chunk_size = 10
-                #if method == 'ML':
-                #    numSimulations = int(numSimulations / 10)
-                num_chunks = int(numSimulations/chunk_size)
-                random_args = {'genename': genename, 'numSimulations': int(numSimulations/num_chunks),
-                               'mode': 'dominant', 'codonseqs': codonseqs,
-                               'codon_table': codon_table, 'method': method}
+            #now we run a bunch of simulations and chop them up into blocks of 100
+            numSimulations = options.numsims
+            chunk_size = 10
+            #if method == 'ML':
+            #    numSimulations = int(numSimulations / 10)
+            num_chunks = int(numSimulations/chunk_size)
+            random_args = {'genename': genename, 'numSimulations': int(numSimulations/num_chunks),
+                              'mode': 'dominant', 'codonseqs': codonseqs,
+                              'codon_table': codon_table, 'method': method}
 
-                results = parallel_process([random_args for x in range(num_chunks)],
-                                           simulate_chunk, use_kwargs = False, front_num=3)
-                flat_results = [item for sublist in results for item in sublist]
-                all_results.append(flat_results)
+            results = parallel_process([random_args for x in range(num_chunks)],
+                                       simulate_chunk, n_jobs = options.threads,
+                                       use_kwargs = False, front_num=3)
+            flat_results = [item for sublist in results for item in sublist]
+            all_results.append(flat_results)
 
         all_flat = [item for sublist in all_results for item in sublist]
         results_df = pd.DataFrame.from_dict(all_flat)
