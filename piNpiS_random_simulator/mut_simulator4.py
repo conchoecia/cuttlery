@@ -376,10 +376,10 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
             print(all_new_codons)
         if sum(successful_mutation) == len(successful_mutation):
             for j in range(1, len(this_mut_profile)):
-                print("changing this codon: {} to this {}".format(
-                    seqs_matrix[j][this_codon_ix], all_new_codons[j-1]))
-                if all_new_codons[j-1] in codon_table.stop_codons:
-                    print("There's a stop codon: {}".format(all_new_codons[j-1]))
+                #print("changing this codon: {} to this {}".format(
+                #    seqs_matrix[j][this_codon_ix], all_new_codons[j-1]))
+                #if all_new_codons[j-1] in codon_table.stop_codons:
+                #    print("There's a stop codon: {}".format(all_new_codons[j-1]))
                 seqs_matrix[j][this_codon_ix] = all_new_codons[j-1]
             num_sites_mutated += 1
 
