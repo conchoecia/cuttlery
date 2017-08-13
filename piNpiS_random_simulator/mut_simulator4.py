@@ -115,14 +115,21 @@ def parse_arguments():
 def seqfreqs(seqs):
     """Calculates the relative frequency of each sequence for calculating pi
     """
+    if "seqfreqs" in options.debug:
+        print("There are {} seqs".format(len(seqs)))
     x = []
     #this block calculates the frequencies of each sequence
     for i in range(len(seqs)):
         this_x = 0
         for j in range(len(seqs)):
-            if np.array_equal(str(seqs[i]), str(seqs[j])):
+            if str(seqs[i]) == str(seqs[j]):
+                if "seqfreqs" in options.debug:
+                    print("{} == {}".format(i, j))
                 this_x += 1
         x.append(this_x/len(seqs))
+    #print("done with these seqfreqs\n")
+    if "seqfreqs" in options.debug:
+        print("the frequencies are {}".format(x))
     return x
 
 def seqs_to_df(seqs):
@@ -147,7 +154,6 @@ def calculate_pi(seqs):
 
     # this is called x due to tradition in the definition of pi
     x = seqfreqs(seqs)
-
     running_sum_pi = 0
     for i in range(len(seqs)):
         for j in range(i+1, len(seqs)):
@@ -314,6 +320,7 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
     random_sites = list(range(len(consensus)))
     np.random.shuffle(random_sites)
     random_iterator = iter(random_sites)
+    #this block makes a list of all possible mutations given the 0th element
     ref_base_to_possible_mutations = {}
     for this_base in ['G','A','T','C']:
         possible_bases = [x for x in ['G','A','T','C'] if x != this_base]
@@ -322,14 +329,15 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
             item.update({0:this_base})
         ref_base_to_possible_mutations[this_base] = possible_mutations
 
-    print(codon_table.stop_codons)
     #print(codon_table.forward_table)
     num_sites_mutated = 0
     i = 0
     if 'mutate' in options.debug:
         print("num_mutations: {}".format(len(mutation_profile)))
 
+    #only stop once we have mutated enough sites
     while num_sites_mutated < len(mutation_profile):
+        #get a random site to try to mutate
         random_site_index = next(random_iterator)
         if 'mutate' in options.debug:
             print("mutation site: {}".format(random_site_index))
@@ -339,7 +347,6 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
         this_codon_pos_ix = codon_map[random_site_index][1]
         this_mut_profile = list(mutation_profile.iloc[i,])
         #print(this_mut_profile)
-        new_row = []
         mutation_dict = {}
         successful_mutation = []
         ref_base = seqs_matrix[0][this_codon_ix][this_codon_pos_ix]
@@ -382,6 +389,7 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
                 #    print("There's a stop codon: {}".format(all_new_codons[j-1]))
                 seqs_matrix[j][this_codon_ix] = all_new_codons[j-1]
             num_sites_mutated += 1
+            i += 1
 
     #for codon in seqs_matrix:
     #    if codon not in codon_table.stop_codons:
@@ -453,8 +461,11 @@ def simulate_chunk(arg_dict):
         # Fourth, generate a random (or somewhat random) consensus sequence
         consensus = random_sequence(arg_dict['codonseqs'], mode = arg_dict['mode']) 
         # Fifth, determine the mutation profile of the other sequences we will mutate
-        mutation_profile = get_mutation_profile(consensus,
-                                                arg_dict['codonseqs'])
+        mutation_profile = get_mutation_profile(consensus, arg_dict['codonseqs'])
+        if 'mutate' in options.debug:
+            print("num_mutations: {}".format(len(mutation_profile)))
+            print("len mutation profile: {}".format(len(mutation_profile)))
+            print(mutation_profile)
         # Sixth, Make a new list of sequences. The 0th will be the consensus, the remaining
         #  sequences will be mutated randomly according to the mutation profile
         mutated_seqs = mutate_consensus(consensus, mutation_profile,
@@ -563,7 +574,7 @@ def main():
 
             #now we run a bunch of simulations and chop them up into blocks of 100
             numSimulations = options.numsims
-            chunk_size = 10
+            chunk_size = 1
             #if method == 'ML':
             #    numSimulations = int(numSimulations / 10)
             num_chunks = int(numSimulations/chunk_size)
