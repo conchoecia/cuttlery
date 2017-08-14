@@ -15,6 +15,7 @@ from itertools import permutations
 #plotting stuff
 import argparse
 import matplotlib
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 from matplotlib import cm
@@ -37,6 +38,20 @@ from Bio.codonalign.codonseq import _get_pi
 #from multiprocessing.dummy import Pool as ThreadPool
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+#set font to helvetica
+global hfont
+hfont = {'fontname':'Helvetica'}
+
+from matplotlib import rc
+rc('text', usetex=True)
+plt.rcParams['text.latex.preamble'] = [
+        r'\usepackage{tgheros}',    # helvetica font
+        r'\usepackage{sansmath}',   # math-font matching  helvetica
+        r'\sansmath'                # actually tell tex to use it!
+        r'\usepackage{siunitx}',    # micro symbols
+        r'\sisetup{detect-all}',    # force siunitx to use the fonts
+        ]
 
 # don't print out options
 pd.options.mode.chained_assignment = None
@@ -596,6 +611,8 @@ def main():
         results_df = pd.read_csv(results_file)
 
     plot_results(results_df)
+    piNpiS_boxplot(results_df)
+
 
 def plot_results(results):
     sims = results[results['type'] == 'simulation']
@@ -679,9 +696,138 @@ def plot_results(results):
     panel0.set_ylabel("piN/piS")
     panel0.set_xlabel("pi")
     panel0.set_title("Simulated mutations pi and piN/piS")
-    #counts = generate_heat_map(panel0, results, purple1)
 
-    plt.savefig("simulation_results_{}.png".format(timestamp()), dpi=600, transparent=False)
+    plt.savefig("piNpiS_picheck_{}.png".format(timestamp()), dpi=600, transparent=False)
+
+def piNpiS_boxplot(results):
+    plt.style.use('BME163')
+    #set the figure dimensions
+    figWidth = 5
+    figHeight = 6
+    fig = plt.figure(figsize=(figWidth,figHeight))
+    #set the panel dimensions
+    panelWidth = 3
+    panelHeight = 4
+    #find the margins to center the panel in figure
+    leftMargin = (figWidth - panelWidth)/2
+    bottomMargin = ((figHeight - panelHeight)/2) + 0.25
+    panel0 =plt.axes([leftMargin/figWidth, #left
+                     bottomMargin/figHeight,    #bottom
+                     panelWidth/figWidth,   #width
+                     panelHeight/figHeight])     #height
+    panel0.tick_params(axis='both',which='both',\
+                       bottom='on', labelbottom='on',\
+                       left='off', labelleft='on', \
+                       right='off', labelright='off',\
+                       top='off', labeltop='off')
+    panel0.spines['top'].set_visible(False)
+    panel0.spines['right'].set_visible(False)
+    panel0.spines['left'].set_visible(False)
+
+
+    #panel0.set_ylim([0, max(results['piNpiS']) * 0.5])
+    panel0.set_ylim([0, 2])
+    sims = results[results['type'] == 'simulation']
+    obs = results[results['type'] == 'observed']
+    obs.sort_values(by="piNpiS", ascending = False, inplace=True)
+    obs.reset_index(inplace=True, drop = True)
+    print(obs.head())
+    seqnames = sorted(results['seqname'].unique(), reverse = True)
+
+    cmap = cm.get_cmap('viridis')
+    rgba = {seqnames[i]: cmap(i/len(seqnames))
+            for i in range(len(seqnames)) }
+
+    for i in range(len(seqnames)):
+        this_seqname = seqnames[i]
+        observed_value = float(obs.loc[obs['seqname'] == this_seqname,'piNpiS'])
+        print("seqname: {}, piNpiS: {}".format(this_seqname, observed_value))
+        top_y = i + 0.1 + 0.5
+        bottom_y = i + 0.9 + 0.5
+        panel0.plot([float(observed_value), float(observed_value)], [top_y, bottom_y],
+                    c = 'red', lw = 1)
+        observations =  sims.loc[sims['seqname'] == this_seqname, ]
+        num_observations = len(observations)
+        min_piNpiS = np.min(observations['piNpiS'])
+        num_ltet = len(observations.query("piNpiS <= {} and piNpiS > 0".format(float(observed_value))))
+        p_val = num_ltet/num_observations
+        #print("{} observed: {}, min: {}, #ltet: {}, #obs: {}".format(this_seqname,
+        #       float(observed_value), min_piNpiS, num_ltet, num_observations))
+        print("pvalue of {}: {}".format(this_seqname, p_val))
+
+    #randomly sample because there are probably too many points to plot
+    sims = sims.query('piNpiS > 0')
+    simulations = [sims.loc[sims['seqname'] == seqname, 'piNpiS'] for seqname in seqnames]
+
+    bp=panel0.boxplot(simulations, \
+                  positions=np.arange(1, len(seqnames) + 1, 1), \
+                  patch_artist=True, widths=0.5, vert = False)
+    for box in bp['boxes']:
+        box.set(edgecolor=(0,0,0,0.5),facecolor=(0,0,0,0),linewidth=0)
+    for whisker in bp['whiskers']:
+        whisker.set(color=(0,0,0,0.25), linestyle='-',linewidth=1)
+    for median in bp['medians']:
+        median.set(color=(0,0,0,1), linestyle='-',linewidth=2)
+    for flier in bp['fliers']:
+        flier.set(markersize=0)
+    for cap in bp['caps']:
+        cap.set(lw=0)
+
+    #fig.set_size_inches(4, 6, forward=True)
+
+    # https://stackoverflow.com/questions/15882249/
+    plt.draw()
+    panel0.set_yticklabels(seqnames)
+    yax = panel0.get_yaxis()
+    # find the maximum width of the label on the major ticks
+    pad = max(T.label.get_window_extent().width for T in yax.majorTicks)
+    yax.set_tick_params(pad=pad)
+
+
+    sims = sims.sample(frac=0.05, replace=False)
+    simulations = [sims.loc[sims['seqname'] == seqname, 'piNpiS'] for seqname in seqnames]
+    masterPP = []
+    start = time.time()
+    for i in np.arange(0,len(seqnames),1):
+        center = 1 + i
+        left_bound = i
+        right_bound = 2 + i
+        step_size = 0.02
+        cutoff = 0.01
+        placed_points = []
+        counter = 0
+        seqname = seqnames[i]
+        for y_value in simulations[i]:
+            counter+=1
+            if len(placed_points)==0:
+                placed_points.append((center, y_value,rgba[seqname]))
+            else:
+                potential_x_position=[]
+                for x_position in np.arange(left_bound,right_bound, step_size):
+                    distances=[]
+                    for placed_point in placed_points:
+                        distance=((x_position-placed_point[0])**2+(y_value-placed_point[1])**2)**0.5
+                        distances.append(distance)
+                    if min(distances)>cutoff:
+                        potential_x_position.append(x_position)
+                if len(potential_x_position)>0:
+                     best_x_position=sorted(potential_x_position,key=lambda x: np.absolute(x-center))[0]
+                     placed_points.append((best_x_position,y_value, rgba[seqname]))
+                else:
+                     print('point not placed: ',y_value)
+        masterPP += placed_points
+
+    panel0.set_xlim([0, 3])
+    panel0.set_xlabel(r"Nucleotide diversity ($\pi$)")
+    panel0.set_title("Beroe forskalii mitochondrial gene\n" r"observed and simulated $\pi$")
+
+
+    for point in masterPP:
+        panel0.plot(point[1],point[0],marker='o',ms=2,
+                    mfc=point[2], mew=0,linewidth=0,
+                    alpha=0.25)
+
+    plt.savefig("piNpiS_boxplot_{}.png".format(timestamp()), dpi=600, transparent=False)
 
 def timestamp():
     """
