@@ -98,6 +98,11 @@ def parse_arguments():
                         action = FullPaths,
                         required = True,
                         help = """this saves the data to a csv file""")
+    parser.add_argument("--threads",
+                        type = int,
+                        default = 2,
+                        help="""The number of threads to use""")
+
 
 
     args = parser.parse_args()
@@ -550,7 +555,7 @@ def main():
                            'codingseqs_dict': codingseqs_dict,
                            'ncseqs_dict': ncseqs_dict}
         # perform the test analyses of the unknown seqs
-        num_simulations = options.numsims * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
+        num_simulations = options.numsims * len(testseqs_dict.keys())
         results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
                                    one_unknown_seq_analysis, n_jobs = 2,
                                    use_kwargs = False, front_num=3)
@@ -559,7 +564,7 @@ def main():
         num_gene_simulations = options.numsims * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
         ## now perform the LOO analyses of all the known coding and nc seqs
         results = parallel_process([seqs_dicts_args for x in range(num_gene_simulations)],
-                                   one_LOO_analysis, n_jobs = 2,
+                                   one_LOO_analysis, n_jobs = options.threads,
                                    use_kwargs = False, front_num=3)
         results_dict_list += results
         results_df = pd.DataFrame.from_dict(results_dict_list)
