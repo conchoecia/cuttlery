@@ -6,6 +6,7 @@ Created on Thu Jun  1 14:54:48 2017
 #info about confusion matrix here: http://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/
 """
 
+import argparse
 import collections
 import math
 import itertools
@@ -16,18 +17,26 @@ import progressbar
 import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
+import os
+import pandas as pd
 from sklearn.metrics import confusion_matrix as cmcalc
 from multiprocessing import cpu_count
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
 
+from tqdm import tqdm
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
+from matplotlib import rc
+rc('text', usetex=True)
+plt.rcParams['text.latex.preamble'] = [
+        r'\usepackage{tgheros}',    # helvetica font
+        r'\usepackage{sansmath}',   # math-font matching  helvetica
+        r'\sansmath'                # actually tell tex to use it!
+        r'\usepackage{siunitx}',    # micro symbols
+        r'\sisetup{detect-all}',    # force siunitx to use the fonts
+        ]
 
-# TODO
-# 1. Make something that stores true positives vs false positives
-#   - Use y_true = [2, 0, 2, 2, 0, 1]
-#         y_pred = [0, 0, 2, 2, 0, 2] from scikit learn
-#   - more info here: http://scikit-learn.org/stable/modules/generated/sklearn.metrics.confusion_matrix.html
 
 global nts
 global starts
@@ -40,20 +49,105 @@ stops = ['TAA','TAG']
 global analyses
 analyses = set()
 
-def determine_pool_size(job_vector):
-    """This function determines how large of a pool to make based on the
-    system resources currently available and how many jobs there are to complete
+#This class is used in argparse to expand the ~. This avoids errors caused on
+# some systems.
+class FullPaths(argparse.Action):
+    """Expand user- and relative-paths"""
+    def __call__(self, parser, namespace, values, option_string=None):
+        setattr(namespace, self.dest,
+                os.path.abspath(os.path.expanduser(values)))
+
+def parse_arguments():
+    """This method parses the arguments provided during command-line input
+    to control how the kmers are counted. Please see the documentation for help.
     """
-    available_threads = cpu_count()
-    total_jobs = len(job_vector)
-    threads_to_pass = total_jobs
-    if total_jobs >= available_threads:
-        threads_to_pass = available_threads
-    if threads_to_pass > 90:
-        threads_to_pass = 90
-    print("There are {} threads available.\nThere are {} jobs:\nMaking a pool with {} threads".format(
-        available_threads, total_jobs, threads_to_pass), file = sys.stderr)
-    return threads_to_pass
+
+    #using Kevin's idea here to make te docstring the help file
+    parser=argparse.ArgumentParser(description=__doc__,
+                                   formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--tt_code",
+                        type = int,
+                        default = 4,
+                        help="""Select which gene code to use. Default is
+                        Standard""")
+    parser.add_argument("--tt_options",
+                        action = 'store_true',
+                        default = False,
+                        help="""Display the optional gene code names that you
+                        may pass to the <--tt_code> argument in a subsequent
+                        run""")
+    parser.add_argument("--coding_dir",
+                        action = FullPaths,
+                        required = True,
+                        help = """The directory with known coding sequences.""")
+    parser.add_argument("--test_dir",
+                        action = FullPaths,
+                        required = True,
+                        help = """The directory with unknown sequences to
+                        test.""")
+    parser.add_argument("--noncoding_dir",
+                        action = FullPaths,
+                        required = True,
+                        help = """The directory with noncoding sequences to
+                        test.""")
+    parser.add_argument("--numsims",
+                        default = 10,
+                        type = int,
+                        help = """number of simulations per gene.""")
+    parser.add_argument("--results_file",
+                        action = FullPaths,
+                        required = True,
+                        help = """this saves the data to a csv file""")
+
+
+    args = parser.parse_args()
+    return args
+
+def parallel_process(array, function, n_jobs=2, use_kwargs=False, front_num=3):
+    """
+        A parallel version of the map function with a progress bar.
+
+        Args:
+            array (array-like): An array to iterate over.
+            function (function): A python function to apply to the elements of array
+            n_jobs (int, default=16): The number of cores to use
+            use_kwargs (boolean, default=False): Whether to consider the elements of array as dictionaries of 
+                keyword arguments to function
+            front_num (int, default=3): The number of iterations to run serially before kicking off the parallel job. 
+                Useful for catching bugs
+        Returns:
+            [function(array[0]), function(array[1]), ...]
+    """
+    #We run the first few iterations serially to catch bugs
+    if front_num > 0:
+        front = [function(**a) if use_kwargs else function(a) for a in array[:front_num]]
+    #If we set n_jobs to 1, just run a list comprehension. This is useful for benchmarking and debugging.
+    if n_jobs==1:
+        return front + [function(**a) if use_kwargs else function(a) for a in tqdm(array[front_num:])]
+    #Assemble the workers
+    with ProcessPoolExecutor(max_workers=n_jobs) as pool:
+        #Pass the elements of array into function
+        if use_kwargs:
+            futures = [pool.submit(function, **a) for a in array[front_num:]]
+        else:
+            futures = [pool.submit(function, a) for a in array[front_num:]]
+        kwargs = {
+            'total': len(futures),
+            'unit': 'it',
+            'unit_scale': True,
+            'leave': True
+        }
+        #Print out the progress as tasks complete
+        for f in tqdm(as_completed(futures), **kwargs):
+            pass
+    out = []
+    #Get the results from the futures.
+    for i, future in tqdm(enumerate(futures)):
+        try:
+            out.append(future.result())
+        except Exception as e:
+            out.append(e)
+    return front + out
 
 def interpret_hypothesis_test(log_likelihood_ratio):
     if log_likelihood_ratio < 0:
@@ -107,39 +201,25 @@ def dirichlet_log_marginal_likelihood(counts_test, counts_background, pseudocoun
         log_like += math.lgamma(pseudocounts + counts_background[codon] + counts_test[codon])
     return log_like
 
-#def remove_starts_stops(seq):
-#    seq1 = [test_seq[i:i+3] for i in
-
-def gen_codons(seq, codon_filtering):
-    codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
-    new_codons = codons
-    if codon_filtering == 1:
-        if codons[0] in starts:
-            new_codons = new_codons[1:]
-        if codons[-1] in stops:
-            new_codons = new_codons[0:-1]
-    elif codon_filtering == 2:
-        if codons[0] in starts:
-            new_codons = new_codons[1:]
-        new_codons = [x for x in new_codons if x not in stops]
-    elif codon_filtering == 3:
-        new_codons = [x for x in codons if x not in starts + stops]
-    return new_codons
-
+def gen_codons(seq):
+    """this generates codons as a list of strings. Each element of the list is
+    a string of length 3"""
+    return [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
 
 # arguments are one test sequence and two lists of sequences representing the two hypothesis groups
 # pseudocounts are added to each codon
 # verbose flag toggles whether test will be interpreted for you on stdout
-def codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudocounts = 0.5, verbose = True, codon_filtering = True): 
+def codon_dirichlet_log_likelihood_ratio(test_seq, seq_list_1, seq_list_2,
+                                         pseudocounts = 0.5, verbose = True):
     # check for data invariants
     assert len(test_seq) % 3 == 0
     for nt in test_seq:
         assert nt in nts
-    for seq in seq_set_1:
+    for seq in seq_list_1:
         assert len(seq) % 3 == 0
         for nt in seq:
             assert nt in nts
-    for seq in seq_set_2:
+    for seq in seq_list_2:
         assert len(seq) % 3 == 0
         for nt in seq:
             assert nt in nts
@@ -149,15 +229,15 @@ def codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudoc
     codon_counts_2 = collections.Counter()
     codon_counts_test = collections.Counter()
 
-    for codon in gen_codons(test_seq, codon_filtering):
+    for codon in gen_codons(test_seq):
         codon_counts_test[codon] += 1
 
-    for seq in seq_set_1:
-        for codon in gen_codons(seq, codon_filtering):
+    for seq in seq_list_1:
+        for codon in gen_codons(seq):
             codon_counts_1[codon] += 1
 
-    for seq in seq_set_2:
-        for codon in gen_codons(seq, codon_filtering):
+    for seq in seq_list_2:
+        for codon in gen_codons(seq):
             codon_counts_2[codon] += 1
 
     # compute bayes factor
@@ -170,181 +250,115 @@ def codon_dirichlet_log_likelihood_ratio(test_seq, seq_set_1, seq_set_2, pseudoc
 
     return log_likelihood_ratio
 
-def gen_noncodings(nc_fasta_filepath, seqs_per_set):
+def gen_noncodingseq_dict(fasta_directory):
     """This function takes a filepath of the fasta file that contains the
     noncoding sequences to use in the analysis.  Instead of manually
     generating all three artificial reading frames, the function
-    generates them automatically and returns in list format for
-    codon_dirichlet_log_likelihood_ratio()
+    generates them automatically and returns in dict format.
+    The keys are the sequence name and the values are a list of sequences.
     """
-    seqs = []
-    for record in SeqIO.parse(nc_fasta_filepath, "fasta"):
-        one_set = []
-        # I'm not sure why I originally put this conditional here,
-        #  but I will leave it
-        if len(record.id) > 4:
+    seqdict = {}
+    filelist = {os.path.splitext(os.path.basename(x))[0]:os.path.join(os.path.abspath(fasta_directory), x)
+                for x in os.listdir(fasta_directory)
+                if os.path.splitext(os.path.basename(x))[1] == ".fasta"}
+
+    for genename in filelist:
+        seqs = []
+        for record in SeqIO.parse(filelist[genename], "fasta"):
+            seq = str(record.seq)
             for i in range(3):
-                seqs.append(record.seq[i:])
-    for i in range(len(seqs)):
-        mod = len(seqs[i]) % 3
-        thisLen = len(seqs[i])
-        seqs[i] = str(seqs[i][0:thisLen-mod])
-    #This groups all the sequences together if the are in the same locus
-    grouped_seqs = [seqs[i:i+(3*seqs_per_set)] for i in range(0,len(seqs),3*seqs_per_set)]
-    return grouped_seqs
+                #this block creates sequences in all three frames
+                frameshifted_seq = seq[i:]
+                mod = len(frameshifted_seq) % 3
+                trimmed_seq = frameshifted_seq[0:len(frameshifted_seq)-mod]
+                # first make sure that the sequence is divisible by three, It should
+                if len(trimmed_seq) % 3 != 0:
+                    raise IOError("""One of the sequences ({}) in ({}) is not
+                    divisible by three. Are there extra bases? Please only save
+                    in-frame fasta sequences.""".format(
+                        genename, filelist[genename]))
+                nostops = remove_all_stops(trimmed_seq)
+                no5primestarts = remove_5p_starts(nostops)
+                nodeletions = remove_deletions(no5primestarts)
+                # just to be pedantic, let's reaffirm that the sequence is divisible
+                #  by three after some processing
+                if len(nodeletions) % 3 != 0:
+                    raise IOError("""One of the sequences ({}) in ({}) is not
+                    divisible by three after filtering for 3' stop codons, 5'
+                    start codons, and alignment-based deletions""".format(
+                        genename, filelist[genename]))
+                seqs.append(nodeletions)
+            seqdict[genename] = seqs
+    return seqdict
 
+def gen_codingseqs_dict(fasta_directory):
+    """This opens a directory of fasta files and reads them into a dictionary.
+    The keys are the sequence name and the values are a list of sequences"""
+    #1.5 get a list of files from the directory we provided.
+    # This is a dict object with key as
+    seqdict = {}
+    filelist = {os.path.splitext(os.path.basename(x))[0]:os.path.join(os.path.abspath(fasta_directory), x)
+                for x in os.listdir(fasta_directory)
+                if os.path.splitext(os.path.basename(x))[1] == ".fasta"}
 
-def gen_test_seqlist(c_fasta_filepath):
-    #this assumes that each test sequence has its own file
-    seqs = []
-    for record in SeqIO.parse(c_fasta_filepath, "fasta"):
-        seqs.append(str(record.seq))
-    return seqs
+    for genename in filelist:
+        seqs = []
+        for record in SeqIO.parse(filelist[genename], "fasta"):
+            seq = str(record.seq)
+            # first make sure that the sequence is divisible by three, It should
+            if len(seq) % 3 != 0:
+                raise IOError("""One of the sequences ({}) in ({}) is not
+                divisible by three. Are there extra bases? Please only save
+                in-frame fasta sequences.""".format(
+                    genename, filelist[genename]))
+            noendstops = remove_3p_stops(seq)
+            no5primestarts = remove_5p_starts(noendstops)
+            nodeletions = remove_deletions(no5primestarts)
+            # just to be pedantic, let's reaffirm that the sequence is divisible
+            #  by three after some processing
+            if len(nodeletions) % 3 != 0:
+                raise IOError("""One of the sequences ({}) in ({}) is not
+                divisible by three after filtering for 3' stop codons, 5'
+                start codons, and alignment-based deletions""".format(
+                    genename, filelist[genename]))
+            seqs.append(nodeletions)
+        seqdict[genename] = seqs
+    return seqdict
 
-def gen_codings(c_fasta_filepath, seqs_per_set):
-    seqs = []
-    for record in SeqIO.parse(c_fasta_filepath, "fasta"):
-        seqs.append(str(record.seq))
-    #This groups all the sequences together if the are in the same locus
-    # the final list is organized such that each index of the grouped_seqs has a
-    # single sequence, and each list at each index contains a sequence from one
-    # individual
-    grouped_seqs = [seqs[i:i+seqs_per_set] for i in range(0,len(seqs),seqs_per_set)]
-    return grouped_seqs
-
-def generate_remove_one_substitution(nontest_seqs_set, test_seqs_set,
-                                     number_of_analyses):
-    """This method returns a a list of tuples of combinations for
-    remove-one tests.  The input format of a seqs set is a list of
-    lists. Each sublist contains the same locus from multiple individuals.
-    For example,
-     seqs_set = [[gene1_ind1, gene1_ind2, gene1_ind3],
-                 [gene2_ind1, gene2_ind2, gene2_ind3],
-                 [gene3_ind1, gene3_ind3, gene3_ind3]]
-
-    This analysis outputs a list of lists. Each list contains at each index:
-      - index 0: The indices for the nontest sequences. a list of tuples.
-                 each tuple's 0th index is the index of the the list in which the
-                 sequence resides and the 1st index is the index of the gene in
-                 the 0th list.
-      - index 1: the (ith gene, jth individual) element used for the test sequence
-      - index 2: a list of (i, j) elements that does not include the ith gene at
-                  index 1 described above.
+def remove_3p_stops(seq):
+    """This function removes the 3' terminal stop codons from a DNA sequence
+    formatted as a python string. Just returns the original sequence otherwise
     """
-    # all of the analyses will be stored in this list
-    analysis_list = []
-    num_nontest_seqs = len(nontest_seqs_set)
-    num_nontest_individuals = len(nontest_seqs_set[0])
-    num_test_seqs = len(test_seqs_set)
-    num_individuals = len(test_seqs_set[0])
-    # now we iterate through all of the combinations of nontest sequences
-    for index in range(number_of_analyses):
-        # randomly generate the test i,j
-        random_i = np.random.randint(0,num_test_seqs)
-        random_j = np.random.randint(0,num_individuals)
-        nontest_indices = np.random.choice(num_nontest_individuals,
-                                           num_nontest_seqs, replace = True)
-        test_indices = np.random.choice(num_individuals,
-                                        num_test_seqs - 1, replace = True)
-        # In this next bit of code, I use final_index_count to keep
-        #  track of how many genes we have iterated through. This is
-        #  mainly used to skip over index i when we encounter it.
-        final_index_count = 0
-        test_indices_index_count = 0
-        test_tuples = []
-        while final_index_count < num_test_seqs:
-            if final_index_count == random_i:
-                #if we're at the test position(i), skip over it
-                final_index_count += 1
-            else:
-                # the 0th index of final_index_count is the index of
-                #  the gene in test_seqs_set, and
-                #  test_indices[test_indices_index_count] is the individual's
-                #  index in the gene seq set
-                one_test_gene = (final_index_count, test_indices[test_indices_index_count])
-                test_tuples.append(one_test_gene)
-                #increase both the indices
-                final_index_count += 1
-                test_indices_index_count += 1
-        this_analysis = (nontest_indices, (random_i, random_j), test_tuples)
-        analysis_list.append(this_analysis)
-    return analysis_list
+    codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
+    if codons[-1] in stops:
+        new_codons = codons[0:-1]
+    else:
+        new_codons = codons
+    return "".join([item for sublist in new_codons for item in sublist])
 
+def remove_deletions(seq):
+    """This function removes codons that contain deletions. For example, the
+    following codons would be removed '---', 'A--', '-G-', 'T-A', et cetera.
+    """
+    codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3) if '-' not in seq[i:i+3]]
+    return "".join([item for sublist in codons for item in sublist])
 
-def generate_seq_lists_from_analyses(analysis_list, nontest_seqs_set, test_seqs_set):
-    nontest_seq_list = []
-    test_seq = ""
-    test_seq_list    = []
-    # unpack everything
-    nontest_indices, test_seq_indices, test_indices_tuples = analysis_list
-    # first go through the nontest_indices
-    for i in range(len(nontest_indices)):
-        this_seq = nontest_seqs_set[i][nontest_indices[i]]
-        nontest_seq_list.append(this_seq)
-    # now get the test sequence
-    i = test_seq_indices[0]
-    j = test_seq_indices[1]
-    test_seq = test_seqs_set[i][j]
-    # now get all the test sequences
-    for i,j in test_indices_tuples:
-        this_seq = test_seqs_set[i][j]
-        test_seq_list.append(this_seq)
+def remove_5p_starts(seq):
+    """This function removes 5' start codons from sequences if they are present.
+    Returns the original sequence otherwise.
+    """
+    codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
+    if codons[0] in starts:
+        new_codons = codons[1:]
+    else:
+        new_codons = codons
+    return "".join([item for sublist in new_codons for item in sublist])
 
-    # now we return the nontest sequences, the test sequence, and the test sequences
-    return (nontest_seq_list, test_seq, test_seq_list)
-
-
-def confusion_matrix(coding_seqsets, nc_seqsets, seqs_per_set,
-                     codon_filtering, number_of_analyses):
-    #first, test all the trues. Generate a list of all combinations of noncoding
-    # and for each combination iterate through all of the groups of coding, and for each
-    # set of coding remove one and test the other against everything else.
-    # That is three for loops.
-    real_val = []
-    observed = []
-    llratio  = []
-    test_dicts = [{"nontest_seqs_set": nc_seqsets,
-                      "test_seqs_set": coding_seqsets,
-                          "test_type": "coding"},
-                  {"nontest_seqs_set": coding_seqsets,
-                      "test_seqs_set": nc_seqsets,
-                          "test_type": "noncoding"}]
-    for this_dict in test_dicts:
-        print("I'm doing some analyses")
-        nontest_seqs_set = this_dict["nontest_seqs_set"]
-        test_seqs_set =    this_dict["test_seqs_set"]
-        bar = progressbar.ProgressBar()
-        # Now we test all of the true sequences
-        print("im coming up with the analyses")
-        analyses = generate_remove_one_substitution(nontest_seqs_set, test_seqs_set,
-                                                    number_of_analyses)
-
-        for i in bar(range(len(analyses))):
-            analysis_list = analyses[i]
-            nontest_seqs, test_seq, test_seqs = generate_seq_lists_from_analyses(analysis_list, nontest_seqs_set, test_seqs_set)
-            if this_dict["test_type"] == "coding":
-                seq_set_1 = test_seqs
-                seq_set_2 = nontest_seqs
-                real_val.append(1)
-            elif this_dict["test_type"] == "noncoding":
-                seq_set_1 = nontest_seqs
-                seq_set_2 = test_seqs
-                real_val.append(2)
-            log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(test_seq,
-                                    seq_set_1, seq_set_2, pseudocounts = 0.1,
-                                    verbose = False, codon_filtering = codon_filtering)
-            if log_likelihood_ratio < 0:
-                favored = 2
-            else:
-                favored = 1
-            observed.append(favored)
-            llratio.append(log_likelihood_ratio)
-
-    matrix = cmcalc(real_val, observed)
-    np.save("llratio", np.array(llratio))
-    np.save("real_val", np.array(real_val))
-    np.save("observed", np.array(observed))
-    print(matrix)
+def remove_all_stops(seq):
+    """This function removes all stop codons from a sequence.
+    """
+    codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3) if seq[i:i+3] not in stops]
+    return "".join([item for sublist in codons for item in sublist])
 
 # estimates the power and false positive rate for the test based on a set of
 # simulated positive and negative results
@@ -393,12 +407,7 @@ def estimate_power_and_false_pos_from_distr(log_likelihood_scores,
     false_pos = total_false_pos / len(log_likelihood_scores)
     return false_pos, power
 
-def plot_ratios(test_seq_names):
-    llratio_list = np.load("llratio.npy")
-    true_value_list = np.load("real_val.npy")
-    obs_value_list  = np.load("observed.npy")
-
-
+def plot_ratios(results_df):
     coding_llratios = np.array([llratio_list[i]
                            for i in range(len(true_value_list))
                            if true_value_list[i] == 1])
@@ -432,68 +441,245 @@ def plot_ratios(test_seq_names):
     ax.set(title='Histogram Comparison', ylabel='% of Dataset in Bin')
     ax.margins(0.05)
     ax.set_ylim(bottom=0)
-    plt.show()
+    plt.savefig("dirichlet_results_{}.png".format(timestamp()), dpi=600, transparent=False)
 
+def timestamp():
+    """
+    Returns the current time in :samp:`YYYY-MM-DD HH:MM:SS` format.
+    """
+    return time.strftime("%Y%m%d_%H%M%S")
 
-def test_unknown(test_seqlist, coding_seqsets, nc_seqsets,
-                 codon_filtering, test_gene_name, num_simulations):
-    #for this test, we need to generate all possible combinations of nc set,
-    # plus using the same coding set for each analysis. This is very similar to
-    # testing the coding sequences above.
-    llratio = []
+def one_LOO_analysis(args):
+    """randomly performs one leave-one-out analysis"""
+    codingseqs_dict = args['codingseqs_dict']
+    ncseqs_dict = args['ncseqs_dict']
 
-    bar = progressbar.ProgressBar()
-    for i in bar(list(range(num_simulations))):
-        # pick a random test sequence
-        seq_i = np.random.randint(0,len(test_seqlist))
-        #use all the coding indices
-        coding_seq_indices = np.random.choice(len(coding_seqsets[0]),
-                                          len(coding_seqsets), replace = True)
+    real_val = np.random.choice(['coding', 'noncoding'])
+    if real_val == 'coding':
+        # remove one of the coding genes and test it
+        dict_keys = [x for x in codingseqs_dict.keys()]
+        test_gene_name = np.random.choice(dict_keys)
+        other_gene_names = [x for x in dict_keys if x != test_gene_name]
+        random_test_seq = np.random.choice(codingseqs_dict[test_gene_name])
+        coding_seqlist = [np.random.choice(codingseqs_dict[genename])
+                          for genename in other_gene_names]
+        nc_seqlist = [np.random.choice(ncseqs_dict[genename])
+                      for genename in ncseqs_dict]
+    elif real_val == 'noncoding':
+        dict_keys = [x for x in ncseqs_dict.keys()]
+        test_gene_name = np.random.choice(dict_keys)
+        other_gene_names = [x for x in dict_keys if x != test_gene_name]
+        random_test_seq = np.random.choice(ncseqs_dict[test_gene_name])
+        coding_seqlist = [np.random.choice(ncseqs_dict[genename])
+                          for genename in other_gene_names]
+        nc_seqlist = [np.random.choice(codingseqs_dict[genename])
+                      for genename in codingseqs_dict]
 
-        #These are all coding sequences
-        seq_set_1 = [coding_seqsets[i][coding_seq_indices[i]]
-                     for i in range(len(coding_seq_indices))]
-        #use all the noncoding indices
-        nc_seq_indices = np.random.choice(len(nc_seqsets[0]),
-                                          len(nc_seqsets), replace = True)
-        #These are all noncoding sequences
-        seq_set_2 = [nc_seqsets[i][nc_seq_indices[i]] for i in range(len(nc_seq_indices))]
-        log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(test_seqlist[seq_i],
-                                    seq_set_1, seq_set_2, pseudocounts = 0.1,
-                                    verbose = False, codon_filtering = codon_filtering)
-        llratio.append(log_likelihood_ratio)
-    np.save("{}_llratio".format(test_gene_name), np.array(llratio))
+    log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(random_test_seq,
+                                coding_seqlist, nc_seqlist, pseudocounts = 0.1,
+                                verbose = False)
 
+    if log_likelihood_ratio < 0:
+        favored = 'noncoding'
+    else:
+        favored = 'coding'
+
+    return {"seqname": test_gene_name, "ll_ratio": log_likelihood_ratio,
+            "analysis_type": "LOO", "real_val": real_val,
+            "oberved": favored}
+
+def one_unknown_seq_analysis(args):
+    testseqs_dict = args['testseqs_dict']
+    codingseqs_dict = args['codingseqs_dict']
+    ncseqs_dict = args['ncseqs_dict']
+
+    # args should be: testseqs_dict, codingseqs_dict, ncseqs_dict
+    # for one simulation, we randomly choose:
+    #   - one of the seqs in the test seqlist
+    #   - one of the seqs in each of the genes in the noncoding seqlist
+    #   - one of the seqs in each of the genes in the coding seqlist
+
+    # each entry of llratio is one analysis
+    # {seqname: <test_gene_name>, ll_ratio: <log_likelihood_ratio>,
+    #  analysis_type: 'test'}
+
+    # This test returns a list of dictionaries of individual values
+
+    testseqs_dict_keys = [x for x in testseqs_dict.keys()]
+    test_gene_name = np.random.choice(testseqs_dict_keys)
+    random_test_seq = np.random.choice(testseqs_dict[test_gene_name])
+    coding_seqlist = [np.random.choice(val)
+                      for seqname_key, val in codingseqs_dict.items()]
+    nc_seqlist = [np.random.choice(val)
+                      for seqname_key, val in ncseqs_dict.items()]
+
+    log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(random_test_seq,
+                                coding_seqlist, nc_seqlist, pseudocounts = 0.1,
+                                verbose = False)
+
+    if log_likelihood_ratio < 0:
+           favored = 'noncoding'
+    else:
+           favored = 'coding'
+
+    return {"seqname": test_gene_name, "ll_ratio": log_likelihood_ratio,
+            "analysis_type": "test", "real_val": None,
+            "oberved": favored}
 
 def main():
-    # FOR INTERNAL CONSISTENCY, ANY SET_1 IS CODING and SET_2 is NONCODING!
-    seqs_per_set = 3
-    codon_filtering = 2
-    num_analyses = 1111111
-    #first generate a list of individuals of the sequence to test
-    unk1 = gen_test_seqlist("unk1_threeind.fasta")
-    nd2l = gen_test_seqlist("nd2l_threeind.fasta")
-    test_seq_names = ["unk1", "nd2l"]
-    #Then get a list of the known sequences
-    coding_seqsets = gen_codings("bf_coding_threeindividuals.fasta", seqs_per_set)
-    nc_seqsets = gen_noncodings("bf_noncoding_threeindividuals.fasta", seqs_per_set)
-    # then get the list of lists of noncoding sequences.
-    # We first have to pass the argument of how many copies of each gene there
-    #  are so that the program adds the sequences in groups, this determines how many
-    #  sequences to add in each sublist.
-    test_unknown(unk1, coding_seqsets, nc_seqsets, 2, "unk1", num_analyses)
-    test_unknown(nd2l, coding_seqsets, nc_seqsets, 2, "nd2l", num_analyses)
+    #First, read in the options
+    global options
+    options = parse_arguments()
+    print(options)
+    ## FOR INTERNAL CONSISTENCY, ANY SET_1 IS CODING and SET_2 is NONCODING!
+    results_file = options.results_file
+    # If we've already done an analysis and the file is there already
+    #  don't bother to do it again, but instead just plot
+    if not os.path.exists(results_file):
+        ##first generate a list of individuals of the sequence to test
+        testseqs_dict = gen_codingseqs_dict(options.test_dir)
+        #Then get a list of the known sequences
+        codingseqs_dict = gen_codingseqs_dict(options.coding_dir)
+        ncseqs_dict = gen_noncodingseq_dict(options.noncoding_dir)
+        # then get the list of lists of noncoding sequences.
+        # We first have to pass the argument of how many copies of each gene there
+        #  are so that the program adds the sequences in groups, this determines how many
+        #  sequences to add in each sublist.
+        results_dict_list = []
+        seqs_dicts_args = {'testseqs_dict': testseqs_dict,
+                           'codingseqs_dict': codingseqs_dict,
+                           'ncseqs_dict': ncseqs_dict}
+        # perform the test analyses of the unknown seqs
+        num_simulations = options.numsims * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
+        results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
+                                   one_unknown_seq_analysis, n_jobs = 2,
+                                   use_kwargs = False, front_num=3)
+        results_dict_list += results
+
+        num_gene_simulations = options.numsims * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
+        ## now perform the LOO analyses of all the known coding and nc seqs
+        results = parallel_process([seqs_dicts_args for x in range(num_gene_simulations)],
+                                   one_LOO_analysis, n_jobs = 2,
+                                   use_kwargs = False, front_num=3)
+        results_dict_list += results
+        results_df = pd.DataFrame.from_dict(results_dict_list)
+        results_df.to_csv(results_file, index=False)
+    else:
+        print("found {} so skipping analysis".format(results_file))
+        results_df = pd.read_csv(results_file)
+
+    plot_results(results_df)
+    #matrix = cmcalc(real_val, observed)
+    #print(llratio)
+    #print(real_val)
+    #print(observed)
+    #np.save("llratio", np.array(llratio))
+    #np.save("real_val", np.array(real_val))
+    #np.save("observed", np.array(observed))
+    #print(matrix)
+
+    #print("confusion matrix with removing starts from beginning and stops from the end and internally (codon_filtering = 2)")
+    #confusion_matrix(codingseqs_dict, nc_seqdict, seqs_per_set, codon_filtering, num_analyses)
+    ##print("confusion matrix with removing all starts and stops from all positions (codon_filtering = 3)")
+    ##confusion_matrix(seq_list_1, seq_list_2, seqs_per_set, 3)
+
+def plot_results(results):
+    print(results.head())
+    plt.style.use('BME163')
+    #set the figure dimensions
+    figWidth = 5
+    figHeight = 4
+    plt.figure(figsize=(figWidth,figHeight))
+    #set the panel dimensions
+    panelWidth = 4
+    panelHeight = 2.5
+    #find the margins to center the panel in figure
+    leftMargin = (figWidth - panelWidth)/2 + 0.125
+    bottomMargin = ((figHeight - panelHeight - 0.5)/2) + 0.75
+    panel0 =plt.axes([leftMargin/figWidth, #left
+                     bottomMargin/figHeight,    #bottom
+                     panelWidth/figWidth,   #width
+                     panelHeight/figHeight])     #height
+    panel0.tick_params(axis='both',which='both',\
+                       bottom='on', labelbottom='on',\
+                       left='on', labelleft='on', \
+                       right='off', labelright='off',\
+                       top='off', labeltop='off')
+    panel0.spines['top'].set_visible(False)
+    panel0.spines['right'].set_visible(False)
+    panel0.spines['left'].set_visible(False)
+
+    noncodings = results[results['real_val'] == 'noncoding']
+    codings = results[results['real_val'] == 'coding']
+    tests = results[results['analysis_type'] == 'test']
+
+    noncoding_seqnames = sorted(noncodings['seqname'].unique())
+    coding_seqnames = sorted(codings['seqname'].unique())
+    tests_seqnames = sorted(tests['seqname'].unique())
+
+    print(noncoding_seqnames)
+    print(coding_seqnames)
+    print(tests_seqnames)
 
 
-    #print("confusion matrix without removing starts and stops (codon_filtering = 0)")
-    #confusion_matrix(seq_set_1, seq_set_2, seqs_per_set, 0)
-    #print("confusion matrix with removing starts and stops (codon_filtering = 1)")
-    #confusion_matrix(seq_set_1, seq_set_2, seqs_per_set, 1)
-    print("confusion matrix with removing starts from beginning and stops from the end and internally (codon_filtering = 2)")
-    confusion_matrix(coding_seqsets, nc_seqsets, seqs_per_set, codon_filtering, num_analyses)
-    #print("confusion matrix with removing all starts and stops from all positions (codon_filtering = 3)")
-    #confusion_matrix(seq_set_1, seq_set_2, seqs_per_set, 3)
-    plot_ratios(test_seq_names)
+    # autumn colors for noncoding
+    cmap = cm.get_cmap('autumn')
+    autumn = {noncoding_seqnames[i]: cmap(1 - (i/len(noncoding_seqnames)))
+            for i in range(len(noncoding_seqnames)) }
+    # winter colors for coding
+    cmap = cm.get_cmap('winter')
+    winter = {coding_seqnames[i]: cmap(1 - (i/len(coding_seqnames)))
+            for i in range(len(coding_seqnames)) }
+    # magma colors for tests
+    cmap = cm.get_cmap('magma')
+    magma = {tests_seqnames[i]: cmap(((i/len(coding_seqnames))) ) for i in range(len(tests_seqnames)) }
+
+    xmin= int(min(results['ll_ratio']))
+    xmax= np.ceil(max(results['ll_ratio']))
+    bins = np.linspace(xmin, xmax, 500)
+    print("autumn", autumn)
+    # first get the noncoding data
+    noncoding_colors = [autumn[noncoding_seqname] for noncoding_seqname in noncoding_seqnames]
+    noncoding_data = [noncodings.query("seqname == '{}'".format(nc_seqname))['ll_ratio'] \
+                      for nc_seqname in noncoding_seqnames]
+
+    out = panel0.hist(noncoding_data, bins, stacked=True, color = noncoding_colors,
+                     alpha = 0.66, label = noncoding_seqnames, normed = True)
+    # then get the coding data
+    coding_colors = [winter[coding_seqname] for coding_seqname in coding_seqnames]
+    coding_data = [codings.query("seqname == '{}'".format(coding_seqname))['ll_ratio'] \
+                      for coding_seqname in coding_seqnames]
+    panel0.hist(coding_data, bins, stacked=True, color = coding_colors,
+                alpha = 0.66, label = coding_seqnames, normed = True)
+    # then get the test data
+    tests_colors = [magma[tests_seqname] for tests_seqname in tests_seqnames]
+    tests_data = [tests.query("seqname == '{}'".format(tests_seqname))['ll_ratio'] \
+                      for tests_seqname in tests_seqnames]
+    for i in range(len(tests_data)):
+        panel0.hist(tests_data[i], bins, color = tests_colors[i],
+                    alpha = 0.25, label = tests_seqnames[i],
+                    normed = True)
+
+    #data = noncoding_data + coding_data
+    #colors = noncoding_colors + coding_colors
+    #panel0.hist(data, bins, stacked=True, color = colors,
+    #            alpha = 0.75, label = noncoding_seqnames + coding_seqnames)
+    panel0.set_xlim([xmin * 1.1, xmax * 1.1])
+    panel0.set_xlim([xmin * 1.1, xmax * 1.1])
+    panel0.legend(loc = 'upper right', fontsize = 8,
+                  ncol = 5, bbox_to_anchor=(1.05, -0.15))
+
+    panel0.set_xlabel("Log-likelihood ratio")
+    panel0.set_ylabel("Normalized Observation Proportions")
+    panel0.set_title("Codon Usage Log-likelihood Ratios")
+    plt.savefig("dirichlet_histogram_{}.png".format(timestamp()), dpi=600, transparent=False)
+
+def timestamp():
+    """
+    Returns the current time in :samp:`YYYY-MM-DD HH:MM:SS` format.
+    """
+    return time.strftime("%Y%m%d_%H%M%S")
+
 
 
 if __name__ == "__main__":
