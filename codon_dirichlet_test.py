@@ -602,8 +602,7 @@ def main():
         #  are so that the program adds the sequences in groups, this determines how many
         #  sequences to add in each sublist.
         results_dict_list = []
-        chunks = [1] + list(range(50, 5050, 50))
-        for chunksize in chunks:
+        for chunksize in range(1,100,3):
             start = time.time()
             seqs_dicts_args = {'testseqs_dict': testseqs_dict,
                                'codingseqs_dict': codingseqs_dict,
