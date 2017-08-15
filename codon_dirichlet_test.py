@@ -23,6 +23,7 @@ from sklearn.metrics import confusion_matrix as cmcalc
 from multiprocessing import cpu_count
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
+import time
 
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -122,6 +123,13 @@ def parallel_process(array, function, n_jobs=2, use_kwargs=False, front_num=3):
                 Useful for catching bugs
         Returns:
             [function(array[0]), function(array[1]), ...]
+
+        For jobs that have a quick compute time and for many threads, it is
+         probably more efficient to split this process up so that it runs in
+         chunks rather than take a lot of overhead creating new jobs. This also
+         needs to be optimized for list unwrapping
+
+    
     """
     #We run the first few iterations serially to catch bugs
     if front_num > 0:
@@ -492,7 +500,6 @@ def one_LOO_analysis(args):
     return {"seqname": test_gene_name, "ll_ratio": log_likelihood_ratio,
             "analysis_type": "LOO", "real_val": real_val,
             "oberved": favored}
-
 def one_unknown_seq_analysis(args):
     testseqs_dict = args['testseqs_dict']
     codingseqs_dict = args['codingseqs_dict']
@@ -531,6 +538,50 @@ def one_unknown_seq_analysis(args):
             "analysis_type": "test", "real_val": None,
             "oberved": favored}
 
+
+def unknown_seq_analysis_chunk(args):
+    testseqs_dict = args['testseqs_dict']
+    codingseqs_dict = args['codingseqs_dict']
+    ncseqs_dict = args['ncseqs_dict']
+    n_iterations = args['n_iterations']
+
+    # args should be: testseqs_dict, codingseqs_dict, ncseqs_dict
+    # for one simulation, we randomly choose:
+    #   - one of the seqs in the test seqlist
+    #   - one of the seqs in each of the genes in the noncoding seqlist
+    #   - one of the seqs in each of the genes in the coding seqlist
+
+    # each entry of llratio is one analysis
+    # {seqname: <test_gene_name>, ll_ratio: <log_likelihood_ratio>,
+    #  analysis_type: 'test'}
+
+    # This test returns a list of dictionaries of individual values
+
+    testseqs_dict_keys = [x for x in testseqs_dict.keys()]
+    results = []
+    for iteration in range(n_iterations):
+        test_gene_name = np.random.choice(testseqs_dict_keys)
+        random_test_seq = np.random.choice(testseqs_dict[test_gene_name])
+        coding_seqlist = [np.random.choice(val)
+                          for seqname_key, val in codingseqs_dict.items()]
+        nc_seqlist = [np.random.choice(val)
+                          for seqname_key, val in ncseqs_dict.items()]
+
+        log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(random_test_seq,
+                                    coding_seqlist, nc_seqlist, pseudocounts = 0.1,
+                                    verbose = False)
+
+        if log_likelihood_ratio < 0:
+               favored = 'noncoding'
+        else:
+               favored = 'coding'
+
+        result = {"seqname": test_gene_name, "ll_ratio": log_likelihood_ratio,
+                "analysis_type": "test", "real_val": None,
+                "oberved": favored}
+        results.append(result)
+    return results
+
 def main():
     #First, read in the options
     global options
@@ -551,29 +602,44 @@ def main():
         #  are so that the program adds the sequences in groups, this determines how many
         #  sequences to add in each sublist.
         results_dict_list = []
-        seqs_dicts_args = {'testseqs_dict': testseqs_dict,
-                           'codingseqs_dict': codingseqs_dict,
-                           'ncseqs_dict': ncseqs_dict}
-        # perform the test analyses of the unknown seqs
-        num_simulations = options.numsims * len(testseqs_dict.keys())
-        results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
-                                   one_unknown_seq_analysis, n_jobs = options.threads,
-                                   use_kwargs = False, front_num=3)
-        results_dict_list += results
+        chunks = [1] + list(range(250, 5250, 250))
+        for chunksize in chunks:
+            start = time.time()
+            seqs_dicts_args = {'testseqs_dict': testseqs_dict,
+                               'codingseqs_dict': codingseqs_dict,
+                               'ncseqs_dict': ncseqs_dict,
+                               'n_iterations': chunksize}
+            # perform the test analyses of the unknown seqs
+            #num_simulations = options.numsims * len(testseqs_dict.keys())
+            num_jobs = options.numsims
+            num_simulations = int(num_jobs/chunksize)
+            #results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
+            #                           one_unknown_seq_analysis, n_jobs = options.threads,
+            #                           use_kwargs = False, front_num=3)
+            results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
+                                       unknown_seq_analysis_chunk, n_jobs = options.threads,
+                                       use_kwargs = False, front_num=3)
+            flat_results = [item for sublist in results for item in sublist]
+            print("len_flat: {}".format(len(flat_results)))
+            results_dict_list += flat_results
+            end = time.time()
+            print("chunksize: {}, time: {}".format(chunksize, end - start))
 
-        num_gene_simulations = options.numsims * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
-        ## now perform the LOO analyses of all the known coding and nc seqs
-        results = parallel_process([seqs_dicts_args for x in range(num_gene_simulations)],
-                                   one_LOO_analysis, n_jobs = options.threads,
-                                   use_kwargs = False, front_num=3)
-        results_dict_list += results
-        results_df = pd.DataFrame.from_dict(results_dict_list)
-        results_df.to_csv(results_file, index=False)
+
+        #num_gene_simulations = options.numsims * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
+        ### now perform the LOO analyses of all the known coding and nc seqs
+        #print("please wait, preparing LOO analyses")
+        #results = parallel_process([seqs_dicts_args for x in range(num_gene_simulations)],
+        #                           one_LOO_analysis, n_jobs = options.threads,
+        #                           use_kwargs = False, front_num=3)
+        #results_dict_list += results
+        #results_df = pd.DataFrame.from_dict(results_dict_list)
+        #results_df.to_csv(results_file, index=False)
     else:
         print("found {} so skipping analysis".format(results_file))
         results_df = pd.read_csv(results_file)
 
-    plot_results(results_df)
+    #plot_results(results_df)
     #matrix = cmcalc(real_val, observed)
     #print(llratio)
     #print(real_val)
@@ -625,7 +691,6 @@ def plot_results(results):
     print(noncoding_seqnames)
     print(coding_seqnames)
     print(tests_seqnames)
-
 
     # autumn colors for noncoding
     cmap = cm.get_cmap('autumn')
