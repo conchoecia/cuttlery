@@ -557,7 +557,7 @@ def main():
         # perform the test analyses of the unknown seqs
         num_simulations = options.numsims * len(testseqs_dict.keys())
         results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
-                                   one_unknown_seq_analysis, n_jobs = 2,
+                                   one_unknown_seq_analysis, n_jobs = options.threads,
                                    use_kwargs = False, front_num=3)
         results_dict_list += results
 
