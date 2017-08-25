@@ -30,6 +30,10 @@ import time
 from functools import partial
 from itertools import permutations
 
+# cuttlery stuff
+from cuttlery.codonfunctions import fasta_dir_to_gene_filelist, fasta_path_to_codonseqs,\
+    seqs_to_df, calculate_pi, seqfreqs, calculate_piN_piS
+
 #plotting stuff
 import argparse
 import matplotlib
@@ -78,87 +82,6 @@ pd.options.mode.chained_assignment = None
 # 2. Determine all of the polymorphic sites in the alignment
 # 3. Calculate pi, piN, and piS for the alignment
 
-def seqfreqs(seqs):
-    """Calculates the relative frequency of each sequence for calculating pi
-    """
-    if "seqfreqs" in options.debug:
-        print("There are {} seqs".format(len(seqs)))
-    x = []
-    #this block calculates the frequencies of each sequence
-    for i in range(len(seqs)):
-        this_x = 0
-        for j in range(len(seqs)):
-            if str(seqs[i]) == str(seqs[j]):
-                if "seqfreqs" in options.debug:
-                    print("{} == {}".format(i, j))
-                this_x += 1
-        x.append(this_x/len(seqs))
-    #print("done with these seqfreqs\n")
-    if "seqfreqs" in options.debug:
-        print("the frequencies are {}".format(x))
-    return x
-
-def seqs_to_df(seqs):
-    """converts sequences to a pandas dataframe s.t. each column is one sequence
-    and each row is one position in the sequence
-    """
-    df_list = []
-    names_list = []
-    for index in range(len(seqs)):
-        names_list.append(seqs[index].id)
-    newseqs = [[char for char in str(seq)] for seq in seqs]
-    df = pd.DataFrame.from_items(zip(names_list, newseqs))
-    return df
-
-def calculate_pi(seqs):
-    """
-    there is some info here http://www.columbia.edu/cu/biology/courses/c3020/solutions-2.html
-    calculates pi of a list of CodonSeq objects
-    """
-    df = seqs_to_df(seqs)
-    #df.apply(rowwise_unique, axis=1)
-
-    # this is called x due to tradition in the definition of pi
-    x = seqfreqs(seqs)
-    running_sum_pi = 0
-    for i in range(len(seqs)):
-        for j in range(i+1, len(seqs)):
-            comp = df.copy().iloc[:,[i,j]]
-            comp.replace('-', np.nan, inplace=True)
-            comp.dropna(axis=0,how='any', inplace=True)
-            #print(comp)
-            num_difs = sum(comp.iloc[:,0] != comp.iloc[:,1])
-            len_seqs = len(comp.iloc[:,0])
-            this_sum = x[i] * x[j] * (num_difs/len_seqs)
-            running_sum_pi += this_sum
-            if 'pi' in options.debug:
-                print("x[i] * x[j] * pi = {} * {} * {}/{}".format(x[i], x[j], num_difs, len_seqs))
-    if 'pi' in options.debug:
-        print("pi: {}".format(running_sum_pi))
-    return running_sum_pi
-
-def _weighted_base(row):
-    """Returns a base using weighted probabilities of what is observed in this
-    sequence column
-    - input is a row of bases corresponding to one alignment column
-    """
-    unique, counts = np.unique(row, return_counts=True)
-    weights = counts / len(row)
-    maxweight = max(weights)
-    choice = np.random.choice(unique, p=weights)
-    return choice
-
-def _max_or_rand_base(row):
-    """Returns the base with maximum frequency, or if none exists,
-    randomly selects one of the objects with maximum frequency
-
-    - input is a row of bases corresponding to one alignment column
-    """
-    unique, counts = np.unique(row, return_counts=True)
-    weights = counts / len(row)
-    maxweight = max(weights)
-    choice = np.random.choice(unique[np.where(weights == maxweight)])
-    return choice
 
 def random_sequence(seqs, mode = 'dominant'):
     """Generates a random consensus sequence given the probabilities of
@@ -173,6 +96,7 @@ def random_sequence(seqs, mode = 'dominant'):
     consensus = df.iloc[:,np.random.choice(list(range(len(seqs))))]
     return consensus
 
+# I don't think I use this
 def _num_mutations(row):
     unique = np.unique(row)
     num_seqs = len(row)
@@ -377,46 +301,7 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
         codonseqs[i].id = names[i]
     return codonseqs
 
-def calculate_piN_piS(codonseqs, method, codon_table):
-    analysis = {"seqname": "", "piN": -1, "piS": -1, "piNpiS": -1, "pi": -1, "method":method}
-    x = seqfreqs(codonseqs)
-    if 'piNpiS' in options.debug:
-        print("freqs are: {}".format(x))
-        print("len codonseqs is: ", len(codonseqs))
-    piN = 0
-    piS = 0
-    for i in range(len(codonseqs)):
-        for j in range(i+1, len(codonseqs)):
-            dN, dS = cal_dn_ds(codonseqs[i], codonseqs[j], codon_table=codon_table, method=method)
-            piN = piN + (x[i] * x[j] * dN)
-            piS = piS + (x[i] * x[j] * dS)
-            if 'piNpiS' in options.debug:
-                print("{0} dN{1}{2}={3} dS{1}{2}={4}".format(method, i, j, dN, dS))
 
-    analysis['piN'] = piN
-    analysis['piS'] = piS
-    try:
-        analysis['piNpiS'] = piN/piS
-    except:
-        analysis['piNpiS'] = 0
-    if 'piNpiS' in options.debug:
-        print ("{0} dN={1:.3f} dS={2:.3f} piN/piS = {3:.3f}".format(
-            method, analysis['piN'], analysis['piS'], analysis['piNpiS']))
-
-    return analysis
-
-def remove_stop_from_end(codonseq, codon_table):
-    """This checks to see if the last three bases of the sequence is a stop
-       codon. If so, remove the last codon."""
-    if str(codonseq[-3:]) in codon_table.stop_codons:
-        #print("chopped", len(CodonSeq().from_seq(codonseq[:-3])))
-        return CodonSeq().from_seq(codonseq[:-3])
-    elif str(codonseq[-3:]) == '---':
-        #print("chopped", len(CodonSeq().from_seq(codonseq[:-3])))
-        return CodonSeq().from_seq(codonseq[:-3])
-    else:
-        #print("unchopped", len(codonseq))
-        return codonseq
 
 def simulate_chunk(arg_dict):
     """This is the helper function for parallelism.
@@ -505,10 +390,8 @@ def pinpissim(args):
     #  don't bother to do it again, but instead just plot
     if not os.path.exists(results_file):
         #1.5 get a list of files from the directory we provided.
-        # This is a dict object with key as
-        filelist = {os.path.splitext(x)[0]:os.path.join(os.path.abspath(options.fasta_dir), x)
-                    for x in os.listdir(options.fasta_dir)
-                    if os.path.splitext(x)[1]}
+        # This is a dict object with filesnames as keys
+        filelist = fasta_dir_to_gene_filelist(options.fasta_dir)
 
         #second, select the codon alphabet to use
         codon_alphabet = get_codon_alphabet(Bio.Data.CodonTable.generic_by_id[options.tt_code], gap_char="-")
@@ -516,17 +399,9 @@ def pinpissim(args):
         all_results = []
         for genename in filelist:
             # Third, read in the sequences to mutate
-            codonseqs = []
-            for record in SeqIO.parse(filelist[genename], "fasta"):
-                this_CS = remove_stop_from_end(CodonSeq().from_seq(record.seq), codon_table)
-                #this_CS = CodonSeq().from_seq(record.seq)
-                this_CS.alphabet = codon_alphabet
-                this_CS.id = record.id
-                codonseqs.append(this_CS)
+            codonseqs = fasta_path_to_codonseqs(filelist[genename], codon_table, codon_alphabet)
             print(genename)
 
-            #methods = ['NG86', 'LWL85', 'YN00', 'ML']
-            #methods = ['NG86', 'LWL85', 'ML']
             method = options.method
             print("processing: {}".format(genename))
             #parallelized for loop goes here

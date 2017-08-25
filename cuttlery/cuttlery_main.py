@@ -28,8 +28,8 @@ import argparse
 import logging
 logger = logging.getLogger('poretools')
 
-# pauvre imports
-import pauvre.version
+# cuttlery imports
+import cuttlery.version
 
 #This class is used in argparse to expand the ~. This avoids errors caused on
 # some systems.
@@ -44,11 +44,6 @@ class FullPathsList(argparse.Action):
     def __call__(self, parser, namespace, values, option_string=None):
         setattr(namespace, self.dest,
                 [os.path.abspath(os.path.expanduser(value)) for value in values])
-
-    commandDict={'dirichlet'    : parser_dirichlet.print_help,
-                 'codonplot'    : parser_codonplot.print_help,
-                 'piNpiSsim'    : parser_piNpiS.print_help,
-                 'heterogeneity': parser_hetero.print_help}
 
 def run_subtool(parser, args):
     if args.command == 'dirichlet':
@@ -70,7 +65,6 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
                         dest="quiet")
 
 def main():
-
     #########################################
     # create the top-level parser
     #########################################
@@ -261,80 +255,57 @@ def main():
                                         in nonsynonymous and synonymous mutations
                                         to help infer which regions of a protein
                                         are under the heaviest selection""")
-    parser_hetero.add_argument('--gff_paths',
-                                metavar='gff_paths',
-                                action=FullPathsList,
-                                nargs = '+',
-                                help="""The input filepath for the gff annotation
-                                to plot""")
-    parser_hetero.add_argument('--gff_labels',
-                                metavar='gff_labels',
-                                type = str,
-                                nargs = '+',
-                                help="""In case the gff names and sequence names
-                                don't match, change the labels that will appear
-                                over the text.""")
+    parser_hetero.add_argument("--fasta_dir",
+                        action = FullPaths,
+                        required = True,
+                        help = """This is the directory where the fasta file
+                        alignments are located. The filename will be used as the
+                        figure label while plotting.""")
+    parser_hetero.add_argument("--tt_code",
+                        type = int,
+                        default = 1,
+                        help="""Select which gene code to use. Default is
+                        Standard""")
+    parser_hetero.add_argument("--tt_options",
+                        action = 'store_true',
+                        default = False,
+                        help="""Display the optional gene code names that you
+                        may pass to the <--tt_code> argument in a subsequent
+                        run""")
+    parser_hetero.add_argument("--method",
+                        default = 'NG86',
+                        choices = ['NG86', 'LWL85', 'YN00', 'ML'],
+                        help = """the method to use in the simulation""")
     parser_hetero.add_argument('--dpi',
                                 metavar='dpi',
                                 default=600,
                                 type=int,
                                 help="""Change the dpi from the default 600
                                 if you need it higher""")
-    parser_hetero.add_argument('--optimum_order',
-                                action = 'store_true',
-                                help="""If selected, this doesn't plot the
-                                optimum arrangement of things as they are input
-                                into gff_paths. Instead, it uses the first gff
-                                file as the top-most sequence in the plot, and
-                                reorganizes the remaining gff files to minimize
-                                the number of intersections.""")
     parser_hetero.add_argument('--aln_dir',
                                 metavar='aln_dir',
                                 action=FullPaths,
                                 help="""The directory where all the fasta
                                 alignments are contained.""")
-    parser_hetero.add_argument('--stop_codons',
-                                action='store_true',
-                                default = True,
-                                help="""Performs some internal corrections if
-                                the gff annotation includes the stop
-                                codons in the coding sequences.""")
-    parser_hetero.add_argument('--center_on',
-                                type = str,
-                                default = None,
-                                help="""centers the plot around the gene that
-                                you pass as an argument""")
-    parser_hetero.add_argument('--start_with_aligned_genes',
-                                action='store_true',
-                                default = False,
-                                help="""Minimizes the number of intersections
-                                but only selects combos where the first gene in
-                                each sequence is aligned.""")
     parser_hetero.add_argument('--fileform',
                                dest='fileform',
-                               metavar='STRING',
                                choices=['png','pdf', 'eps', 'jpeg', 'jpg',
                                         'pdf', 'pgf', 'ps', 'raw', 'rgba',
                                         'svg', 'svgz', 'tif', 'tiff'],
                                default=['png'],
                                nargs='+',
-                               help='Which output format would you like? Def.=png')
+                               help="""Which output format would you like?
+                               Default is png. Select multiple options by putting
+                               a space between them: --fileform png pdf jpg""")
     parser_hetero.add_argument('-o', '--output-base-name',
-                               dest='BASENAME',
                                help='Specify a base name for the output file('
                                 's). The input file base name is the '
                                 'default.')
     parser_hetero.add_argument('-n', '--no-transparent',
-                               dest='TRANSPARENT',
                                action='store_false',
                                help="""Not the TV show. Specify this option if
                                you don't want a transparent background. Default
                                is on.""")
-    parser_hetero.add_argument('--sandwich',
-                                action='store_true',
-                                default = False,
-                                help="""Put an additional copy of the first gff
-                                file on the bottom of the plot for comparison.""")
 
     parser_hetero.set_defaults(func=run_subtool)
 
