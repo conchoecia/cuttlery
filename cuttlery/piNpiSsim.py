@@ -35,7 +35,6 @@ from cuttlery.codonfunctions import fasta_dir_to_gene_filelist, fasta_path_to_co
     seqs_to_df, calculate_pi, seqfreqs, calculate_piN_piS
 
 #plotting stuff
-import argparse
 import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
