@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # cuttlery - 'Codon Usage Table Tools-lery.'
 # Copyright (c) 2016-2017 Darrin T. Schultz. All rights reserved.
@@ -18,9 +18,7 @@
 # You should have received a copy of the GNU General Public License
 # along with cuttlery.  If not, see <http://www.gnu.org/licenses/>.
 #
-#Created on Thu Jun  1 14:54:48 2017
-#
-#@author: Jordan/DTS
+#@author: DTS
 #info about confusion matrix here: http://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/
 
 #Python/System stuff
