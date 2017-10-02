@@ -34,7 +34,8 @@ from builtins import range
 import progressbar
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('agg')
+#matplotlib.use('webagg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Rectangle
 from matplotlib import cm
@@ -527,10 +528,25 @@ def dirichlet(args):
     options = args
     ## FOR INTERNAL CONSISTENCY, ANY SET_1 IS CODING and SET_2 is NONCODING!
     results_file = options.results_file
+    if results_file == None:
+        raise IOError("""You must specify a name for a results file. If you already
+        have results and just want to plot your data, pass the existing file to --results_file""")
     chunksize = 60
     # If we've already done an analysis and the file is there already
     #  don't bother to do it again, but instead just plot
     if not os.path.exists(results_file):
+        # check that the test_dir, coding dir, and noncoding dir exist and that
+        # they have fasta files inside
+        for dir_type, check_dir in (("noncoding_dir", options.noncoding_dir),
+                          ("test_dir", options.test_dir),
+                          ("coding_dir", options.coding_dir)):
+            if not os.path.isdir(check_dir):
+                raise IOError("""Your results file {} didn't exist so cuttlery dirichlet looked
+                for the fasta files for analysis. We couldn't find the {}: {}.
+                Please make sure that this directory exists.""".format(
+                    results_file, dir_type, check_dir))
+           ## In the future I should implement something to check that there are
+           ##  some fasta files in this directory. Not sure if it is necessary right now though. 
         ##first generate a list of individuals of the sequence to test
         testseqs_dict = gen_codingseqs_dict(options.test_dir)
         #Then get a list of the known sequences
@@ -568,10 +584,12 @@ def dirichlet(args):
         results_df.to_csv(results_file, index=False)
     else:
         print("found {} so skipping analysis".format(results_file))
-        results_df = pd.read_csv(results_file, index = False)
+        results_df = pd.read_csv(results_file, index_col = False)
 
     if options.plot:
-        plot_results(results_df)
+        #plot_results(results_df)
+        plot_results_simple(results_df)
+
 
     # now output statistics about the data
     real_val = results_df.loc[results_df['analysis_type'] == 'LOO', 'real_val']
@@ -684,6 +702,256 @@ def plot_results(results):
     panel0.set_ylabel("Normalized Observation Proportions")
     panel0.set_title("Codon Usage Log-likelihood Ratios")
     plt.savefig("dirichlet_histogram_{}.png".format(timestamp()), dpi=600, transparent=False)
+
+def plot_results_simple(results):
+    plt.style.use('BME163')
+    #set the figure dimensions
+    figWidth = 5
+    figHeight = 4
+    plt.figure(figsize=(figWidth,figHeight))
+    #set the panel dimensions
+    panelWidth = 4
+    panelHeight = 2.5
+    #find the margins to center the panel in figure
+    leftMargin = (figWidth - panelWidth)/2 
+    bottomMargin = ((figHeight - panelHeight)/2)
+    panel0 =plt.axes([leftMargin/figWidth, #left
+                     bottomMargin/figHeight,    #bottom
+                     panelWidth/figWidth,   #width
+                     panelHeight/figHeight])     #height
+    panel0.tick_params(axis='both',which='both',\
+                       bottom='on', labelbottom='on',\
+                       left='off', labelleft='off', \
+                       right='off', labelright='off',\
+                       top='off', labeltop='off')
+    panel0.spines['top'].set_visible(False)
+    panel0.spines['right'].set_visible(False)
+    panel0.spines['left'].set_visible(False)
+
+    noncodings = results[results['real_val'] == 'noncoding']
+    codings = results[results['real_val'] == 'coding']
+    tests = results[results['analysis_type'] == 'test']
+
+    noncoding_seqnames = sorted(noncodings['seqname'].unique())
+    coding_seqnames = sorted(codings['seqname'].unique())
+    tests_seqnames = sorted(tests['seqname'].unique())
+    all_seqnames = noncoding_seqnames + tests_seqnames + coding_seqnames
+
+    data_lists = [list(results.loc[results['seqname'] == seqname, 'll_ratio']) for
+                  seqname in all_seqnames]
+
+    print(noncoding_seqnames)
+    print(coding_seqnames)
+    print(tests_seqnames)
+
+    # autumn colors for noncoding
+    cmap = cm.get_cmap('autumn')
+    autumn = {noncoding_seqnames[i]: cmap(1 - (i/len(noncoding_seqnames)))
+            for i in range(len(noncoding_seqnames)) }
+    # winter colors for coding
+    cmap = cm.get_cmap('winter')
+    winter = {coding_seqnames[i]: cmap(1 - (i/len(coding_seqnames)))
+            for i in range(len(coding_seqnames)) }
+    # magma colors for tests
+    cmap = cm.get_cmap('magma')
+    magma = {tests_seqnames[i]: cmap(((i/len(coding_seqnames))) ) for i in range(len(tests_seqnames)) }
+
+    ## We need to plot each of the sections individually to accommodate the gaps
+    ## Put all the colors into a list with the same indices as all_seqnames
+    noncoding_colors = [autumn[noncoding_seqname] for noncoding_seqname in noncoding_seqnames]
+    coding_colors = [winter[coding_seqname] for coding_seqname in coding_seqnames]
+    tests_colors = [magma[tests_seqname] for tests_seqname in tests_seqnames]
+    all_colors = noncoding_colors + tests_colors + coding_colors
+    print(all_colors)
+
+    plt.axvline(x=0, color=(0,0,0,0.5), linewidth=0.5)
+
+
+    positions = []
+    counter = -1
+    for this_list in [noncoding_seqnames, tests_seqnames, coding_seqnames]:
+        counter += 1
+        positions = positions + list(np.arange(counter, counter+len(this_list), 1))
+        counter += len(this_list)
+
+    nc=panel0.violinplot(data_lists, \
+                  positions=positions, \
+                  widths=0.5, vert = False,
+                  showmeans=False,showmedians=False,showextrema=False,
+                  bw_method=0.05)
+    for i in range(len(nc['bodies'])):
+        nc['bodies'][i].set_facecolor(all_colors[i])
+        nc['bodies'][i].set_alpha(0.75)
+        nc['bodies'][i].set_edgecolor('black')
+
+    #panel0.set_ylim([len(data_lists), -1 ])
+    plt.gca().invert_yaxis()
+    xmin  = results['ll_ratio'].min() * 1.1
+    xmax = results['ll_ratio'].max() * 1.1
+    ax_width = abs(xmax - xmin)
+    panel0.set_xlim(xmin, xmax)
+
+    smart_ticks = True
+    if smart_ticks:
+        # first plot text for noncodings
+        # find the max ll_ratio in noncodings and left align all labels there
+        noncoding_max = noncodings['ll_ratio'].max() * 1.05
+        pos_ix = 0
+        noncodingtext_xmaxes = []
+        noncodingtext_ymaxes = []
+        noncodingtext_ymins = []
+        for i in range(len(noncoding_seqnames)):
+            tx = panel0.text(noncoding_max, positions[pos_ix], all_seqnames[pos_ix],
+                        verticalalignment='center',
+                        horizontalalignment='left',
+                        color='black', fontsize=8)
+            plt.draw()
+            txcoords = tx.get_window_extent().transformed(panel0.transData.inverted())
+            noncodingtext_xmaxes.append(txcoords.xmax)
+            noncodingtext_ymaxes.append(txcoords.ymax)
+            noncodingtext_ymins.append(txcoords.ymin)
+            pos_ix += 1
+        # Now draw a bounding box for the noncoding region
+        plot_left_facing_bracket(panel0, noncodingtext_xmaxes, noncodingtext_ymaxes,
+                                 noncodingtext_ymins, ax_width, "noncoding")
+
+        # Put the test sequences on individually
+        for i in range(len(tests_seqnames)):
+            print(coding_seqnames[i])
+            thismin = tests.loc[tests['seqname'] == tests_seqnames[i], 'll_ratio'].min()
+            thismax = tests.loc[tests['seqname'] == tests_seqnames[i], 'll_ratio'].max()
+            leftdif = abs(xmax - thismax)
+            rightdif = abs(thismin - xmin)
+            if leftdif <= rightdif:
+                panel0.text(thismin * 0.95, positions[pos_ix], all_seqnames[pos_ix],
+                        verticalalignment='center',
+                        horizontalalignment='right',
+                        color='black', fontsize=8)
+            else:
+                panel0.text(thismax * 1.05, positions[pos_ix], all_seqnames[pos_ix],
+                        verticalalignment='center',
+                        horizontalalignment='left',
+                        color='black', fontsize=8)
+            pos_ix += 1
+        # and finish up with the coding seqs
+        codingtext_xmins = []
+        codingtext_ymaxes = []
+        codingtext_ymins = []
+        coding_min = codings['ll_ratio'].min()
+        if coding_min < 0:
+            coding_min *= 1.05
+        else:
+            coding_min *= 0.95
+        for i in range(len(coding_seqnames)):
+            tx = panel0.text(coding_min, positions[pos_ix], all_seqnames[pos_ix],
+                        verticalalignment='center',
+                        horizontalalignment='right',
+                        color='black', fontsize=8)
+            plt.draw()
+            txcoords = tx.get_window_extent().transformed(panel0.transData.inverted())
+            codingtext_xmins.append(txcoords.xmin)
+            codingtext_ymaxes.append(txcoords.ymax)
+            codingtext_ymins.append(txcoords.ymin)
+            pos_ix += 1
+        # Now draw a bounding box for the coding region
+        plot_right_facing_bracket(panel0, codingtext_xmins, codingtext_ymaxes,
+                                 codingtext_ymins, ax_width, "coding")
+
+
+    else:
+        # this is here because I need to align the tick labels
+        # https://stackoverflow.com/questions/15882249/
+        plt.draw()
+        panel0.set_yticks(positions)
+        panel0.set_yticklabels(all_seqnames)
+        # this stuff is to align the tick labels but I think it looks OK now
+        #yax = panel0.get_yaxis()
+        ## find the maximum width of the label on the major ticks
+        #pad = max(T.label.get_window_extent().width for T in yax.majorTicks)
+        #yax.set_tick_params(pad=pad/3)
+
+    panel0.set_xlabel("Log-likelihood ratio")
+    panel0.set_title("Codon Usage Log-likelihood Ratios")
+
+
+    #plt.show()
+    plt.savefig("dirichlet_violins.png", dpi=600, transparent=True)
+
+    #plt.savefig("dirichlet_histogram_{}.png".format(timestamp()), dpi=600, transparent=False)
+
+def plot_left_facing_bracket(panel, xmaxes, ymaxes, ymins, ax_width, text):
+    nct_xmax = max(xmaxes)
+    nct_ymax = max(ymaxes)
+    nct_ymin = min(ymins)
+    y_offset = 0.05
+
+    topleftx = nct_xmax + (ax_width * 0.01)
+    toplefty = nct_ymin - (y_offset * 2)
+    toprightx = nct_xmax + (ax_width * 0.02)
+    toprighty = nct_ymin - (y_offset * 2)
+    bottomrightx = nct_xmax + (ax_width * 0.02)
+    bottomrighty = nct_ymax + y_offset
+    bottomleftx  = nct_xmax + (ax_width * 0.01)
+    bottomlefty = nct_ymax  + y_offset
+    #top part
+    panel.plot([topleftx, toprightx],\
+                [toplefty, toprighty],\
+                color='k', linestyle='-',\
+                linewidth = 0.5)
+    #vertical part
+    panel.plot([toprightx, bottomrightx],\
+                [toprighty, bottomrighty],\
+                color='k', linestyle='-',\
+                linewidth = 0.5)
+    #bottom part
+    panel.plot([bottomleftx, bottomrightx],\
+                [bottomlefty, bottomrighty],\
+                color='k', linestyle='-',\
+                linewidth = 0.5)
+    tx = panel.text(bottomrightx + nct_xmax * 0.03,\
+                     toprighty - ((toprighty - bottomrighty)/2),\
+                    "noncoding",
+                    verticalalignment='center',
+                    horizontalalignment='left',
+                    rotation = 90,
+                    color='black', fontsize=10)
+
+def plot_right_facing_bracket(panel, xmins, ymaxes, ymins, ax_width, text):
+    nct_xmin = min(xmins)
+    nct_ymax = max(ymaxes)
+    nct_ymin = min(ymins)
+    y_offset = 0.05
+
+    topleftx = nct_xmin - (ax_width * 0.02)
+    toplefty = nct_ymin - (y_offset * 2)
+    toprightx = nct_xmin - (ax_width * 0.01)
+    toprighty = nct_ymin - (y_offset * 2)
+    bottomrightx = nct_xmin - (ax_width * 0.01)
+    bottomrighty = nct_ymax + y_offset
+    bottomleftx  = nct_xmin - (ax_width * 0.02)
+    bottomlefty = nct_ymax + y_offset
+    #top part
+    panel.plot([topleftx, toprightx],\
+                [toplefty, toprighty],\
+                color='k', linestyle='-',\
+                linewidth = 0.5)
+    #vertical part
+    panel.plot([bottomleftx, topleftx],\
+                [toplefty, bottomlefty],\
+                color='k', linestyle='-',\
+                linewidth = 0.5)
+    #bottom part
+    panel.plot([bottomleftx, bottomrightx],\
+                [bottomlefty, bottomrighty],\
+                color='k', linestyle='-',\
+                linewidth = 0.5)
+    tx = panel.text(bottomleftx - (ax_width * 0.01),\
+                     toprighty - ((toprighty - bottomrighty)/2),\
+                    "coding",
+                    verticalalignment='center',
+                    horizontalalignment='right',
+                    rotation = 90,
+                    color='black', fontsize=10)
 
 def timestamp():
     """

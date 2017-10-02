@@ -615,13 +615,14 @@ def piNpiS_boxplot(results):
     rgba = {seqnames[i]: cmap(i/len(seqnames))
             for i in range(len(seqnames)) }
 
+    # I think this block mostly just prints the observed piNpiS values for the sequences
     for i in range(len(seqnames)):
         this_seqname = seqnames[i]
         observed_value = float(obs.loc[obs['seqname'] == this_seqname,'piNpiS'])
         top_y = i + 0.1 + 0.5
         bottom_y = i + 0.9 + 0.5
         panel0.plot([float(observed_value), float(observed_value)], [top_y, bottom_y],
-                    c = 'red', lw = 1)
+                    c = 'black', lw = 1)
         observations =  sims.loc[sims['seqname'] == this_seqname, ]
         num_observations = len(observations)
         min_piNpiS = np.min(observations['piNpiS'])
@@ -642,7 +643,7 @@ def piNpiS_boxplot(results):
     for whisker in bp['whiskers']:
         whisker.set(color=(0,0,0,0.25), linestyle='-',linewidth=1)
     for median in bp['medians']:
-        median.set(color=(0,0,0,1), linestyle='-',linewidth=2)
+        median.set(color='red', linestyle='-',linewidth=2)
     for flier in bp['fliers']:
         flier.set(markersize=0)
     for cap in bp['caps']:
@@ -650,6 +651,7 @@ def piNpiS_boxplot(results):
 
     #fig.set_size_inches(4, 6, forward=True)
 
+    # this is here because I need to align the tick labels
     # https://stackoverflow.com/questions/15882249/
     plt.draw()
     panel0.set_yticklabels(seqnames)
@@ -662,7 +664,6 @@ def piNpiS_boxplot(results):
     sims = sims.sample(frac=0.05, replace=False)
     simulations = [sims.loc[sims['seqname'] == seqname, 'piNpiS'] for seqname in seqnames]
     masterPP = []
-    start = time.time()
     for i in np.arange(0,len(seqnames),1):
         center = 1 + i
         left_bound = i

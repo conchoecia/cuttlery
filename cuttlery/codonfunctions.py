@@ -36,36 +36,93 @@ import Bio.Data.CodonTable
 from Bio.codonalign.codonalphabet import get_codon_alphabet
 from Bio.codonalign.codonseq import cal_dn_ds
 from Bio.codonalign.codonseq import _get_pi
+import matplotlib.pyplot as plt
 
+def calculate_average_percent_difference(seqs):
+    """
+    there is some info here http://www.columbia.edu/cu/biology/courses/c3020/solutions-2.html
+    calculates pi of a list of codonseq objects
 
-def fasta_dir_to_gene_filelist(fasta_dir):
-    abspath = os.path.abspath(fasta_dir)
-    filelist = {os.path.splitext(x)[0]:os.path.join(abspath, x)
-                for x in os.listdir(fasta_dir)
-                if os.path.splitext(x)[1]}
-    return filelist
+    this method does not factor indels into the calculation. all sites
+    with indels will be ignored.
+    """
+    df = seqs_to_df(seqs)
+    #df.apply(rowwise_unique, axis=1)
 
-def fasta_path_to_codonseqs(fasta_path, codon_table, codon_alphabet):
-    codonseqs = []
-    for record in SeqIO.parse(fasta_path, "fasta"):
-        this_CS = remove_stop_from_end(CodonSeq().from_seq(record.seq), codon_table)
-        this_CS.alphabet = codon_alphabet
-        this_CS.id = record.id
-        codonseqs.append(this_CS)
-    return codonseqs
+    # this is called x due to tradition in the definition of pi
+    x = seqfreqs(seqs)
+    percent_difference = []
+    for i in range(len(seqs)):
+        for j in range(i+1, len(seqs)):
+            comp = df.copy().iloc[:,[i,j]]
+            comp.replace('-', np.nan, inplace=True)
+            comp.dropna(axis=0,how='any', inplace=True)
+            num_difs = sum(comp.iloc[:,0] != comp.iloc[:,1])
+            len_seqs = len(comp.iloc[:,0])
+            percent_difference.append(num_difs/len_seqs)
+    return np.mean(percent_difference)
 
-def remove_stop_from_end(codonseq, codon_table):
-    """This checks to see if the last three bases of the sequence is a stop
-       codon. If so, remove the last codon."""
-    if str(codonseq[-3:]) in codon_table.stop_codons:
-        #print("chopped", len(CodonSeq().from_seq(codonseq[:-3])))
-        return CodonSeq().from_seq(codonseq[:-3])
-    elif str(codonseq[-3:]) == '---':
-        #print("chopped", len(CodonSeq().from_seq(codonseq[:-3])))
-        return CodonSeq().from_seq(codonseq[:-3])
-    else:
-        #print("unchopped", len(codonseq))
-        return codonseq
+def calculate_pi(seqs):
+    """
+    there is some info here http://www.columbia.edu/cu/biology/courses/c3020/solutions-2.html
+    calculates pi of a list of codonseq objects
+
+    this method does not factor indels into the calculation. all sites
+    with indels will be ignored.
+    """
+    df = seqs_to_df(seqs)
+    #df.apply(rowwise_unique, axis=1)
+
+    # this is called x due to tradition in the definition of pi
+    x = seqfreqs(seqs)
+    running_sum_pi = 0
+    for i in range(len(seqs)):
+        for j in range(i+1, len(seqs)):
+            comp = df.copy().iloc[:,[i,j]]
+            comp.replace('-', np.nan, inplace=True)
+            comp.dropna(axis=0,how='any', inplace=True)
+            num_difs = sum(comp.iloc[:,0] != comp.iloc[:,1])
+            len_seqs = len(comp.iloc[:,0])
+            this_sum = x[i] * x[j] * (num_difs/len_seqs)
+            running_sum_pi += this_sum
+            #if 'pi' in options.debug:
+            #    print("x[i] * x[j] * pi = {} * {} * {}/{}".format(x[i], x[j], num_difs, len_seqs))
+    #if 'pi' in options.debug:
+    #    print("pi: {}".format(running_sum_pi))
+    return running_sum_pi
+
+def calculate_piN_piS(codonseqs, method, codon_table):
+    """
+    takes a list of CodonSeq() objects and calculates piN, piS, pi, and piNpiS
+    for them
+    """
+    analysis = {"seqname": "", "piN": -1, "piS": -1, "piNpiS": -1, "pi": -1, "method":method}
+    x = seqfreqs(codonseqs)
+    #if 'piNpiS' in options.debug:
+    #    print("freqs are: {}".format(x))
+    #    print("len codonseqs is: ", len(codonseqs))
+    piN = 0
+    piS = 0
+    for i in range(len(codonseqs)):
+        for j in range(i+1, len(codonseqs)):
+            #print(codonseqs[i], codonseqs[j])
+            dN, dS = cal_dn_ds(codonseqs[i], codonseqs[j], codon_table=codon_table, method=method)
+            piN = piN + (x[i] * x[j] * dN)
+            piS = piS + (x[i] * x[j] * dS)
+            #if 'piNpiS' in options.debug:
+            #    print("{0} dN{1}{2}={3} dS{1}{2}={4}".format(method, i, j, dN, dS))
+
+    analysis['piN'] = piN
+    analysis['piS'] = piS
+    try:
+        analysis['piNpiS'] = piN/piS
+    except:
+        analysis['piNpiS'] = 0
+    #if 'piNpiS' in options.debug:
+    #    print ("{0} dN={1:.3f} dS={2:.3f} piN/piS = {3:.3f}".format(
+    #        method, analysis['piN'], analysis['piS'], analysis['piNpiS']))
+
+    return analysis
 
 def codonseqs_sliced(codonseqs, windowsize):
     """
@@ -126,43 +183,70 @@ def codonseqs_sliced(codonseqs, windowsize):
     #print("0th codon is: {}".format(codonseqs[0].get_codon(0)))
     return sliced_codonseqs, num_codons
 
+def fasta_dir_to_gene_filelist(fasta_dir):
+    abspath = os.path.abspath(fasta_dir)
+    filelist = {os.path.splitext(x)[0]:os.path.join(abspath, x)
+                for x in os.listdir(fasta_dir)
+                if os.path.splitext(x)[1]}
+    return filelist
+
+def fasta_path_to_codonseqs(fasta_path, codon_table, codon_alphabet):
+    codonseqs = []
+    for record in SeqIO.parse(fasta_path, "fasta"):
+        this_CS = remove_stop_from_end(CodonSeq().from_seq(record.seq), codon_table)
+        this_CS.alphabet = codon_alphabet
+        this_CS.id = record.id
+        codonseqs.append(this_CS)
+    return codonseqs
+
+def fasta_path_to_seqs(fasta_path, codon_table=False, codon_alphabet=False):
+    """This converts a fasta file into a list of Seq Objects
+    """
+    seqs = []
+    for record in SeqIO.parse(fasta_path, "fasta"):
+        seqs.append(record)
+    return seqs
+
+def print_images(base_output_name, image_formats, dpi, transparent=False):
+    file_base = os.path.splitext(os.path.basename(base_output_name))[0]
+    for fmt in image_formats:
+        out_name = "{}.{}".format(file_base, fmt)
+        try:
+            if fmt == 'png':
+                plt.savefig(out_name, dpi=dpi, transparent=transparent)
+            else:
+                plt.savefig(out_name, format=fmt, transparent=transparent)
+        except PermissionError:
+            # thanks to https://github.com/wdecoster for the suggestion
+            print("""You don't have permission to save cuttlery plots to this
+            directory. Try changing the directory and running the script again!""")
+
+def remove_stop_from_end(codonseq, codon_table):
+    """This checks to see if the last three bases of the sequence is a stop
+       codon. If so, remove the last codon."""
+    if str(codonseq[-3:]) in codon_table.stop_codons:
+        #print("chopped", len(CodonSeq().from_seq(codonseq[:-3])))
+        return CodonSeq().from_seq(codonseq[:-3])
+    elif str(codonseq[-3:]) == '---':
+        #print("chopped", len(CodonSeq().from_seq(codonseq[:-3])))
+        return CodonSeq().from_seq(codonseq[:-3])
+    else:
+        #print("unchopped", len(codonseq))
+        return codonseq
+
 def seqs_to_df(seqs):
     """converts sequences to a pandas dataframe s.t. each column is one sequence
-    and each row is one position in the sequence
+    and each row is one position in the sequence.
+
+    seqs can be a list of biopython seq objects, or codonseqs
     """
     df_list = []
     names_list = []
     for index in range(len(seqs)):
         names_list.append(seqs[index].id)
-    newseqs = [[char for char in str(seq)] for seq in seqs]
+    newseqs = [[char for char in str(thisseq.seq)] for thisseq in seqs]
     df = pd.DataFrame.from_items(zip(names_list, newseqs))
     return df
-
-def calculate_pi(seqs):
-    """
-    there is some info here http://www.columbia.edu/cu/biology/courses/c3020/solutions-2.html
-    calculates pi of a list of CodonSeq objects
-    """
-    df = seqs_to_df(seqs)
-    #df.apply(rowwise_unique, axis=1)
-
-    # this is called x due to tradition in the definition of pi
-    x = seqfreqs(seqs)
-    running_sum_pi = 0
-    for i in range(len(seqs)):
-        for j in range(i+1, len(seqs)):
-            comp = df.copy().iloc[:,[i,j]]
-            comp.replace('-', np.nan, inplace=True)
-            comp.dropna(axis=0,how='any', inplace=True)
-            num_difs = sum(comp.iloc[:,0] != comp.iloc[:,1])
-            len_seqs = len(comp.iloc[:,0])
-            this_sum = x[i] * x[j] * (num_difs/len_seqs)
-            running_sum_pi += this_sum
-            #if 'pi' in options.debug:
-            #    print("x[i] * x[j] * pi = {} * {} * {}/{}".format(x[i], x[j], num_difs, len_seqs))
-    #if 'pi' in options.debug:
-    #    print("pi: {}".format(running_sum_pi))
-    return running_sum_pi
 
 def seqfreqs(seqs):
     """Calculates the relative frequency of each sequence for calculating pi
@@ -183,36 +267,3 @@ def seqfreqs(seqs):
     #if "seqfreqs" in options.debug:
     #    print("the frequencies are {}".format(x))
     return x
-
-def calculate_piN_piS(codonseqs, method, codon_table):
-    """
-    takes a list of CodonSeq() objects and calculates piN, piS, pi, and piNpiS
-    for them
-    """
-    analysis = {"seqname": "", "piN": -1, "piS": -1, "piNpiS": -1, "pi": -1, "method":method}
-    x = seqfreqs(codonseqs)
-    #if 'piNpiS' in options.debug:
-    #    print("freqs are: {}".format(x))
-    #    print("len codonseqs is: ", len(codonseqs))
-    piN = 0
-    piS = 0
-    for i in range(len(codonseqs)):
-        for j in range(i+1, len(codonseqs)):
-            #print(codonseqs[i], codonseqs[j])
-            dN, dS = cal_dn_ds(codonseqs[i], codonseqs[j], codon_table=codon_table, method=method)
-            piN = piN + (x[i] * x[j] * dN)
-            piS = piS + (x[i] * x[j] * dS)
-            #if 'piNpiS' in options.debug:
-            #    print("{0} dN{1}{2}={3} dS{1}{2}={4}".format(method, i, j, dN, dS))
-
-    analysis['piN'] = piN
-    analysis['piS'] = piS
-    try:
-        analysis['piNpiS'] = piN/piS
-    except:
-        analysis['piNpiS'] = 0
-    #if 'piNpiS' in options.debug:
-    #    print ("{0} dN={1:.3f} dS={2:.3f} piN/piS = {3:.3f}".format(
-    #        method, analysis['piN'], analysis['piS'], analysis['piNpiS']))
-
-    return analysis

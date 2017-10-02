@@ -54,6 +54,8 @@ def run_subtool(parser, args):
         import cuttlery.piNpiSsim as submodule
     elif args.command == 'heterogeneity':
         import cuttlery.heterogeneity as submodule
+    elif args.command == 'calculate-pi':
+        import cuttlery.calculate_pi as submodule
     # run the chosen submodule.
     submodule.run(args)
 
@@ -63,6 +65,12 @@ class ArgumentParserWithDefaults(argparse.ArgumentParser):
         self.add_argument("-q", "--quiet", help="Do not output warnings to stderr",
                         action="store_true",
                         dest="quiet")
+
+class MyParser(argparse.ArgumentParser):
+    def error(self, message):
+        sys.stderr.write('error: %s\n' % message)
+        self.print_help()
+        sys.exit(2)
 
 def main():
     #########################################
@@ -77,73 +85,6 @@ def main():
     #########################################
     # create the individual tool parsers
     #########################################
-
-    #############
-    # codonplot
-    #############
-    parser_codonplot = subparsers.add_parser('codonplot',
-                                        help="""calculates codon usage from
-                                        protein alignments, then prints and plots
-                                        the results""")
-    parser_codonplot.add_argument('-f', '--fastq',
-                               metavar='FASTQ',
-                               action=FullPaths,
-                               help='The input FASTQ file.')
-    parser_codonplot.add_argument('-n', '--no-transparent',
-                               dest='TRANSPARENT',
-                               action='store_false',
-                               help="""Not the TV show. Specify this option if
-                               you don't want a transparent background. Default
-                               is on.""")
-    parser_codonplot.add_argument('-t', '--title',
-                               metavar='TITLE',
-                               default='Read length vs mean quality',
-                               help="""This sets the title for the whole plot.
-                               Use --title "Crustacean's DNA read quality"
-                               if you need single quote or apostrophe
-                               inside title.""")
-    parser_codonplot.add_argument('--maxlen',
-                               metavar='MAXLEN',
-                               type=int,
-                               help="""This sets the max read length to plot.""")
-    parser_codonplot.add_argument('-m', '--maxqual',
-                               metavar='MAXQUAL',
-                               type=int,
-                               help="""This sets the max mean read quality
-                               to plot.""")
-    parser_codonplot.add_argument('--lengthbin',
-                               metavar='LENGTHBIN',
-                               type=int,
-                               help="""This sets the bin size to use for length.""")
-    parser_codonplot.add_argument('--qualbin',
-                               metavar='QUALBIN',
-                               type=float,
-                               help="""This sets the bin size to use for quality""")
-    parser_codonplot.add_argument('-y', '--add-yaxes',
-                               dest='Y_AXES',
-                               action='store_true',
-                               help='Add Y-axes to both marginal histograms.')
-    parser_codonplot.add_argument('--fileform',
-                               dest='fileform',
-                               metavar='STRING',
-                               choices=['png','pdf', 'eps', 'jpeg', 'jpg',
-                                        'pdf', 'pgf', 'ps', 'raw', 'rgba',
-                                        'svg', 'svgz', 'tif', 'tiff'],
-                               default=['png'],
-                               nargs='+',
-                               help='Which output format would you like? Def.=png')
-    parser_codonplot.add_argument('-o', '--output-base-name',
-                               dest='BASENAME',
-                               help='Specify a base name for the output file('
-                                    's). The input file base name is the '
-                                    'default.')
-    parser_codonplot.add_argument('-d', '--dpi',
-                               metavar='dpi',
-                               default=600,
-                               type=int,
-                               help="""Change the dpi from the default 600
-                               if you need it higher""")
-    parser_codonplot.set_defaults(func=run_subtool)
 
     ############
     # dirichlet
@@ -168,16 +109,13 @@ def main():
                         help="""Plot the data file""")
     parser_dirichlet.add_argument("--coding_dir",
                         action = FullPaths,
-                        required = True,
                         help = """The directory with known coding sequences.""")
     parser_dirichlet.add_argument("--test_dir",
                         action = FullPaths,
-                        required = True,
                         help = """The directory with unknown sequences to
                         test.""")
     parser_dirichlet.add_argument("--noncoding_dir",
                         action = FullPaths,
-                        required = True,
                         help = """The directory with noncoding sequences to
                         test.""")
     parser_dirichlet.add_argument("--numsims",
@@ -186,7 +124,6 @@ def main():
                         help = """number of simulations per gene.""")
     parser_dirichlet.add_argument("--results_file",
                         action = FullPaths,
-                        required = True,
                         help = """this saves the data to a csv file""")
     parser_dirichlet.add_argument("--threads",
                         type = int,
@@ -297,17 +234,100 @@ def main():
                                help="""Which output format would you like?
                                Default is png. Select multiple options by putting
                                a space between them: --fileform png pdf jpg""")
-    parser_hetero.add_argument('-o', '--output-base-name',
+    parser_hetero.add_argument('-o', '--output-basename',
+                               default = "heterogeneity_output",
                                help='Specify a base name for the output file('
                                 's). The input file base name is the '
                                 'default.')
-    parser_hetero.add_argument('-n', '--no-transparent',
+    parser_hetero.add_argument('-T', '--transparent',
                                action='store_false',
-                               help="""Not the TV show. Specify this option if
-                               you don't want a transparent background. Default
+                               default = True,
+                               help="""Not the TV show. Specifies if
+                               you want a transparent background. Default
                                is on.""")
 
     parser_hetero.set_defaults(func=run_subtool)
+
+    #############
+    # codonplot
+    #############
+    parser_codonplot = subparsers.add_parser('codonplot',
+                                        help="""Plots the codon usage of a
+                                        collection of genes as a violinplot.""")
+    parser_codonplot.add_argument("--coding_fasta_dir",
+                        action = FullPaths,
+                        help = """The directory that contains the fasta files
+                        (alignments or normal sequences) of known coding sequences
+                        sequences""")
+    parser_codonplot.add_argument('--fileform',
+                               dest='fileform',
+                               choices=['png','pdf', 'eps', 'jpeg', 'jpg',
+                                        'pdf', 'pgf', 'ps', 'raw', 'rgba',
+                                        'svg', 'svgz', 'tif', 'tiff'],
+                               default=['png'],
+                               nargs='+',
+                               help="""Which output format would you like?
+                               Default is png. Select multiple options by putting
+                               a space between them: --fileform png pdf jpg""")
+    parser_codonplot.add_argument('-T', '--transparent',
+                               action='store_false',
+                               default = True,
+                               help="""Not the TV show. Specifies if
+                               you want a transparent background. Default
+                               is on.""")
+    parser_codonplot.add_argument("--test_fasta_dir",
+                        action = FullPaths,
+                        help = """If there are ORFs but their status as
+                        protein-coding is dubious, use this to plot frequencies
+                        of individuals reads over the histogram.""")
+    parser_codonplot.add_argument("--noncoding_fasta_dir",
+                        action = FullPaths,
+                        help = """The directory that contains the fasta files
+                        (alignments or normal sequences) of noncoding sequences""")
+    parser_codonplot.add_argument("--tt_code",
+                        type = int,
+                        default = 1,
+                        help="""Select which gene code to use. Default is
+                        Standard""")
+    parser_codonplot.add_argument("--tt_options",
+                        action = 'store_true',
+                        default = False,
+                        help="""Display the optional gene code names that you
+                        may pass to the <--tt_code> argument in a subsequent
+                        run""")
+    parser_codonplot.add_argument("--output", type=str,
+                        default=sys.stdout,
+                        help="""the output will be saved here""")
+    parser_codonplot.add_argument("--output_basename",
+                        default = "codonplot",
+                        help = """The results will be written to this file as a
+                        csv.""")
+    parser_codonplot.add_argument("--invert",
+                        default = False,
+                        action = 'store_true',
+                        help="""Inverts some of the colors to make the plot look
+                        better on dark backgrounds while preserving alpha.""")
+    parser_codonplot.add_argument('--dpi',
+                                metavar='dpi',
+                                default=600,
+                                type=int,
+                                help="""Change the dpi from the default 600
+                                if you need it higher""")
+    parser_codonplot.set_defaults(func=run_subtool)
+
+    ###############
+    # calculate-pi
+    ###############
+    parser_calcpi = subparsers.add_parser('calculate-pi',
+                                        help="""Calculates the pi value of a
+                                        fasta alignment.""")
+    parser_calcpi.add_argument("--fasta_aln",
+                        action = FullPathsList,
+                        required = True,
+                        nargs = '+',
+                        help = """Calculates the pi value of a fasta alignment""")
+    parser_calcpi.set_defaults(func=run_subtool)
+
 
 
     #######################################################
@@ -326,7 +346,8 @@ def main():
     commandDict={'dirichlet'    : parser_dirichlet.print_help,
                  'codonplot'    : parser_codonplot.print_help,
                  'piNpiSsim'    : parser_piNpiS.print_help,
-                 'heterogeneity': parser_hetero.print_help}
+                 'heterogeneity': parser_hetero.print_help,
+                 'calculate-pi' : parser_calcpi.print_help}
 
     if len(sys.argv)==2:
         commandDict[args.command]()
