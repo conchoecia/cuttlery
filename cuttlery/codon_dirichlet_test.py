@@ -23,17 +23,12 @@
 title: cuttlery dirichlet
 authors: - Darrin T Schultz (github@conchoecia)
          - Jordan M Eizenga (github@jeizenga)
-conception: Jordan M Eizenga (and a tiny tiny bit DTS)
+conception: Jordan M Eizenga (and a little bit DTS)
 
-This program observes the nucleotide diversity of a protein-coding
-locus in a population of sequences. Using this information it
-generates other similar sequences with the same nucleotide diversity
-and geneaology as the observed sequences. However, the generated
-sequences have their mutation sites modeled from a randomly-chosen
-observed sequence at randomly chosen sites. This simulation may
-estimate the lower bounds of piN/piS for a neutrally evolving sequence
-of similar base composition and geneology as the observed population
-of protein-coding sequences.
+
+In short, this test asks if the trinucleotide frequency of a test ORF
+more closely matches the trinucleotides frequencies of coding or
+noncoding DNA from the same species.
 """
 
 #

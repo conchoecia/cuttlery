@@ -20,7 +20,7 @@
 
 """
 title: cuttlery calculate-pi
-author: Darrin T Schultz - github@conchoecia
+author: Darrin T Schultz (github@conchoecia)
 
 This program calculates the value of little pi, also known as
 nucleotide diversity, of the sequences in a fasta alignment.
