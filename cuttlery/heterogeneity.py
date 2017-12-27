@@ -18,6 +18,15 @@
 # You should have received a copy of the GNU General Public License
 # along with cuttlery.  If not, see <http://www.gnu.org/licenses/>.
 #
+"""title: cuttlery heterogeneity
+author: Darrin T Schultz - github@conchoecia
+conception: Russell Corbett-Detig
+
+This program plots synonymous and nonsynonymous mutations along the
+length of a locus. The density of the mutations along the proteins'
+sequences are represented by sticks and a density plot.
+"""
+
 #@author: DTS
 #info about confusion matrix here: http://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/
 

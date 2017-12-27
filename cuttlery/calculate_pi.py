@@ -18,13 +18,23 @@
 # You should have received a copy of the GNU General Public License
 # along with cuttlery.  If not, see <http://www.gnu.org/licenses/>.
 
-"""cuttlery calculate-pi
+"""
+title: cuttlery calculate-pi
+author: Darrin T Schultz - github@conchoecia
 
-This program calculate the value of little pi, also known as
+This program calculates the value of little pi, also known as
 nucleotide diversity, of the sequences in a fasta alignment.
 
-You can calculate it from many fasta files using --fasta_aln
+The most sensible way to use this program is to make one fasta
+alignment with your favorite fasta alignment program and to save it as
+a fasta alignment. Alternatively, you can make a fasta alignment and
+save each sequence to a separate fasta file.
 
+Then, calculate little pi using cuttlery with
+
+    cuttlery calculate-pi --fasta_aln <fasta_aln1.fasta> <fasta_aln2.fasta> <et cetera>
+
+The output will be printed to std out.
 """
 from cuttlery.codonfunctions import fasta_path_to_seqs, calculate_pi,\
                                     calculate_average_percent_difference

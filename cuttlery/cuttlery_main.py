@@ -20,13 +20,14 @@
 
 # I took this code from https://github.com/arq5x/poretools/. Check it out. - DTS
 
+"""
+CUTTlery: Codon Usage Table Tools and Bayesian determination of ORF protein coding-ness. 
+Darrin Schultz (github@conchoecia) and Jordan Eizenga (github@jeizenga)
+"""
+
 import sys
 import os.path
 import argparse
-
-#logger
-import logging
-logger = logging.getLogger('poretools')
 
 # cuttlery imports
 import cuttlery.version
@@ -46,16 +47,16 @@ class FullPathsList(argparse.Action):
                 [os.path.abspath(os.path.expanduser(value)) for value in values])
 
 def run_subtool(parser, args):
-    if args.command == 'dirichlet':
-        import cuttlery.codon_dirichlet_test as submodule
+    if args.command == 'calculate-pi':
+        import cuttlery.calculate_pi as submodule
     elif args.command == 'codonplot':
         import cuttlery.codonplot as submodule
-    elif args.command == 'piNpiSsim':
-        import cuttlery.piNpiSsim as submodule
+    elif args.command == 'dirichlet':
+        import cuttlery.codon_dirichlet_test as submodule
     elif args.command == 'heterogeneity':
         import cuttlery.heterogeneity as submodule
-    elif args.command == 'calculate-pi':
-        import cuttlery.calculate_pi as submodule
+    elif args.command == 'piNpiSsim':
+        import cuttlery.piNpiSsim as submodule
     # run the chosen submodule.
     submodule.run(args)
 
@@ -76,7 +77,9 @@ def main():
     #########################################
     # create the top-level parser
     #########################################
-    parser = argparse.ArgumentParser(prog='cuttlery', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser = argparse.ArgumentParser(prog='cuttlery',
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+                                     description=__doc__)
     parser.add_argument("-v", "--version", help="Installed cuttlery version",
                         action="version",
                         version="%(prog)s " + str(cuttlery.version.__version__))
@@ -86,12 +89,92 @@ def main():
     # create the individual tool parsers
     #########################################
 
+
+    ###############
+    # calculate-pi
+    ###############
+    parser_calcpi = subparsers.add_parser('calculate-pi',
+                                        help="""Calculates the pi value of a
+                                        fasta alignment.""")
+    parser_calcpi.add_argument("--fasta_aln",
+                        action = FullPathsList,
+                        nargs = '+',
+                        help = """Calculates the pi value of a fasta alignment.
+                        Can take an alignment of multiple sequences in one fasta
+                        file, or split over many fasta files. Please note that
+                        this program does not produce fasta alignments, just
+                        analyzes them!""")
+    parser_calcpi.set_defaults(func=run_subtool)
+
+    #############
+    # codonplot
+    #############
+    parser_codonplot = subparsers.add_parser('codonplot',
+                                        help="""Plots the codon usage of a
+                                        collection of genes as a violinplot.""")
+    parser_codonplot.add_argument("--coding_fasta_dir",
+                        action = FullPaths,
+                        help = """The directory that contains the fasta files
+                        (alignments or normal sequences) of known coding sequences
+                        sequences""")
+    parser_codonplot.add_argument('--fileform',
+                               dest='fileform',
+                               choices=['png','pdf', 'eps', 'jpeg', 'jpg',
+                                        'pdf', 'pgf', 'ps', 'raw', 'rgba',
+                                        'svg', 'svgz', 'tif', 'tiff'],
+                               default=['png'],
+                               nargs='+',
+                               help="""Which output format would you like?
+                               Default is png. Select multiple options by putting
+                               a space between them: --fileform png pdf jpg""")
+    parser_codonplot.add_argument('-T', '--transparent',
+                               action='store_false',
+                               default = True,
+                               help="""Specifies if
+                               you want a transparent background. Default
+                               is on.""")
+    parser_codonplot.add_argument("--test_fasta_dir",
+                        action = FullPaths,
+                        help = """If there are ORFs but their status as
+                        protein-coding is dubious, use this to plot frequencies
+                        of individuals reads over the histogram as dots.""")
+    parser_codonplot.add_argument("--tt_code",
+                        type = int,
+                        default = 1,
+                        help="""Select which gene code to use. Default is
+                        Standard""")
+    parser_codonplot.add_argument("--tt_options",
+                        action = 'store_true',
+                        default = False,
+                        help="""Display the optional gene code names that you
+                        may pass to the <--tt_code> argument in a subsequent
+                        run""")
+    parser_codonplot.add_argument("--output", type=str,
+                        default=sys.stdout,
+                        help="""the output will be saved here""")
+    parser_codonplot.add_argument("--output_basename",
+                        default = "codonplot",
+                        help = """The results will be written to this file as a
+                        csv.""")
+    parser_codonplot.add_argument("--invert",
+                        default = False,
+                        action = 'store_true',
+                        help="""Inverts some of the colors to make the plot look
+                        better on dark backgrounds while preserving alpha.""")
+    parser_codonplot.add_argument('--dpi',
+                                metavar='dpi',
+                                default=600,
+                                type=int,
+                                help="""Change the dpi from the default 600
+                                if you need it higher""")
+    parser_codonplot.set_defaults(func=run_subtool)
+
     ############
     # dirichlet
     ############
     parser_dirichlet = subparsers.add_parser('dirichlet',
                                         help="""Determine if unknown sequences
-                                        better fit coding or noncoding sequences""")
+                                        better fit coding or noncoding sequences.""")
     parser_dirichlet.add_argument("--tt_code",
                         type = int,
                         default = 4,
@@ -131,59 +214,6 @@ def main():
                         help="""The number of threads to use""")
     parser_dirichlet.set_defaults(func=run_subtool)
 
-    #############
-    # piNpiSsim
-    #############
-    parser_piNpiS = subparsers.add_parser('piNpiSsim',
-                                        help="""Simulate neutral evolution of
-                                        aligned sequences given observed
-                                        alignments""")
-    parser_piNpiS.add_argument("--outprefix",
-                        type=str,
-                        default=sys.stdout,
-                        help="""the output will be saved here""")
-    parser_piNpiS.add_argument("--tt_code",
-                        type = int,
-                        default = 4,
-                        help="""Select which gene code to use. Default is
-                        Standard""")
-    parser_piNpiS.add_argument("--tt_options",
-                        action = 'store_true',
-                        default = False,
-                        help="""Display the optional gene code names that you
-                        may pass to the <--tt_code> argument in a subsequent
-                        run""")
-    parser_piNpiS.add_argument("--debug",
-                        type = str,
-                        nargs = '+',
-                        default = ['NA'],
-                        help = """Use this to print out special things while
-                        debugging""")
-    parser_piNpiS.add_argument("--fasta_dir",
-                        action = FullPaths,
-                        required = True,
-                        help = """This is the directory where the fasta file
-                        alignments are located. The filename will be used as the
-                        figure label while plotting.""")
-    parser_piNpiS.add_argument("--results_file",
-                        required = True,
-                        help = """The results will be written to this file as a
-                        csv.""")
-    parser_piNpiS.add_argument("--method",
-                        default = 'NG86',
-                        choices = ['NG86', 'LWL85', 'YN00', 'ML'],
-                        help = """the method to use in the simulation""")
-    parser_piNpiS.add_argument("--numsims",
-                        required = True,
-                        type = int,
-                        help = """the results will be written to this file as a
-                        csv.""")
-    parser_piNpiS.add_argument("--threads",
-                        required = False,
-                        type = int,
-                        help = """The num threads to attempt to use.""")
-    parser_piNpiS.set_defaults(func=run_subtool)
-
     ###############
     # heterogenity
     ###############
@@ -191,7 +221,7 @@ def main():
                                         help="""Looks at site-wise heterogeneity
                                         in nonsynonymous and synonymous mutations
                                         to help infer which regions of a protein
-                                        are under the heaviest selection""")
+                                        are under the heaviest selection.""")
     parser_hetero.add_argument("--fasta_dir",
                         action = FullPaths,
                         required = True,
@@ -245,89 +275,60 @@ def main():
                                help="""Not the TV show. Specifies if
                                you want a transparent background. Default
                                is on.""")
-
     parser_hetero.set_defaults(func=run_subtool)
 
     #############
-    # codonplot
+    # piNpiSsim
     #############
-    parser_codonplot = subparsers.add_parser('codonplot',
-                                        help="""Plots the codon usage of a
-                                        collection of genes as a violinplot.""")
-    parser_codonplot.add_argument("--coding_fasta_dir",
-                        action = FullPaths,
-                        help = """The directory that contains the fasta files
-                        (alignments or normal sequences) of known coding sequences
-                        sequences""")
-    parser_codonplot.add_argument('--fileform',
-                               dest='fileform',
-                               choices=['png','pdf', 'eps', 'jpeg', 'jpg',
-                                        'pdf', 'pgf', 'ps', 'raw', 'rgba',
-                                        'svg', 'svgz', 'tif', 'tiff'],
-                               default=['png'],
-                               nargs='+',
-                               help="""Which output format would you like?
-                               Default is png. Select multiple options by putting
-                               a space between them: --fileform png pdf jpg""")
-    parser_codonplot.add_argument('-T', '--transparent',
-                               action='store_false',
-                               default = True,
-                               help="""Not the TV show. Specifies if
-                               you want a transparent background. Default
-                               is on.""")
-    parser_codonplot.add_argument("--test_fasta_dir",
-                        action = FullPaths,
-                        help = """If there are ORFs but their status as
-                        protein-coding is dubious, use this to plot frequencies
-                        of individuals reads over the histogram.""")
-    parser_codonplot.add_argument("--noncoding_fasta_dir",
-                        action = FullPaths,
-                        help = """The directory that contains the fasta files
-                        (alignments or normal sequences) of noncoding sequences""")
-    parser_codonplot.add_argument("--tt_code",
+    parser_piNpiS = subparsers.add_parser('piNpiSsim',
+                                        help="""Simulate neutral evolution of
+                                        aligned sequences given observed
+                                        nucleotide diversity.""")
+    parser_piNpiS.add_argument("--outprefix",
+                        type=str,
+                        default=sys.stdout,
+                        help="""the output will be saved here""")
+    parser_piNpiS.add_argument("--tt_code",
                         type = int,
-                        default = 1,
+                        default = 4,
                         help="""Select which gene code to use. Default is
                         Standard""")
-    parser_codonplot.add_argument("--tt_options",
+    parser_piNpiS.add_argument("--tt_options",
                         action = 'store_true',
                         default = False,
                         help="""Display the optional gene code names that you
                         may pass to the <--tt_code> argument in a subsequent
                         run""")
-    parser_codonplot.add_argument("--output", type=str,
-                        default=sys.stdout,
-                        help="""the output will be saved here""")
-    parser_codonplot.add_argument("--output_basename",
-                        default = "codonplot",
+    parser_piNpiS.add_argument("--debug",
+                        type = str,
+                        nargs = '+',
+                        default = ['NA'],
+                        help = """Use this to print out special things while
+                        debugging""")
+    parser_piNpiS.add_argument("--fasta_dir",
+                        action = FullPaths,
+                        required = True,
+                        help = """This is the directory where the fasta file
+                        alignments are located. The filename will be used as the
+                        figure label while plotting.""")
+    parser_piNpiS.add_argument("--results_file",
+                        required = True,
                         help = """The results will be written to this file as a
                         csv.""")
-    parser_codonplot.add_argument("--invert",
-                        default = False,
-                        action = 'store_true',
-                        help="""Inverts some of the colors to make the plot look
-                        better on dark backgrounds while preserving alpha.""")
-    parser_codonplot.add_argument('--dpi',
-                                metavar='dpi',
-                                default=600,
-                                type=int,
-                                help="""Change the dpi from the default 600
-                                if you need it higher""")
-    parser_codonplot.set_defaults(func=run_subtool)
-
-    ###############
-    # calculate-pi
-    ###############
-    parser_calcpi = subparsers.add_parser('calculate-pi',
-                                        help="""Calculates the pi value of a
-                                        fasta alignment.""")
-    parser_calcpi.add_argument("--fasta_aln",
-                        action = FullPathsList,
+    parser_piNpiS.add_argument("--method",
+                        default = 'NG86',
+                        choices = ['NG86', 'LWL85', 'YN00', 'ML'],
+                        help = """the method to use in the simulation""")
+    parser_piNpiS.add_argument("--numsims",
                         required = True,
-                        nargs = '+',
-                        help = """Calculates the pi value of a fasta alignment""")
-    parser_calcpi.set_defaults(func=run_subtool)
-
+                        type = int,
+                        help = """the results will be written to this file as a
+                        csv.""")
+    parser_piNpiS.add_argument("--threads",
+                        required = False,
+                        type = int,
+                        help = """The num threads to attempt to use.""")
+    parser_piNpiS.set_defaults(func=run_subtool)
 
 
     #######################################################
@@ -350,8 +351,10 @@ def main():
                  'calculate-pi' : parser_calcpi.print_help}
 
     if len(sys.argv)==2:
+        exec("import cuttlery.{} as temp_name".format(
+            args.command.replace("-", "_")), globals())
+        print(temp_name.__doc__)
         commandDict[args.command]()
-
         sys.exit(1)
 
     if args.quiet:

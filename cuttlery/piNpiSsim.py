@@ -17,6 +17,23 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with cuttlery.  If not, see <http://www.gnu.org/licenses/>.
+"""
+title: cuttlery piNpiSsim
+author: Darrin T Schultz - github@conchoecia
+conception: Russell Corbett-Detig
+thanks to: Jordan Eizenga (github@jeizenga)
+
+This program observes the nucleotide diversity of a protein-coding
+locus in a population of sequences. Using this information it
+generates other similar sequences with the same nucleotide diversity
+and geneaology as the observed sequences. However, the generated
+sequences have their mutation sites modeled from a randomly-chosen
+observed sequence at randomly chosen sites. This simulation may
+estimate the lower bounds of piN/piS for a neutrally evolving sequence
+of similar base composition and geneology as the observed population
+of protein-coding sequences.
+"""
+
 
 #mathy stuff
 import numpy as np

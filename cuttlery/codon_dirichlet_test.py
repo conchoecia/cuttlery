@@ -19,6 +19,23 @@
 # along with cuttlery.  If not, see <http://www.gnu.org/licenses/>.
 #
 #Created on Thu Jun  1 14:54:48 2017
+"""
+title: cuttlery dirichlet
+authors: - Darrin T Schultz (github@conchoecia)
+         - Jordan M Eizenga (github@jeizenga)
+conception: Jordan M Eizenga (and a tiny tiny bit DTS)
+
+This program observes the nucleotide diversity of a protein-coding
+locus in a population of sequences. Using this information it
+generates other similar sequences with the same nucleotide diversity
+and geneaology as the observed sequences. However, the generated
+sequences have their mutation sites modeled from a randomly-chosen
+observed sequence at randomly chosen sites. This simulation may
+estimate the lower bounds of piN/piS for a neutrally evolving sequence
+of similar base composition and geneology as the observed population
+of protein-coding sequences.
+"""
+
 #
 #@author: Jordan/DTS
 #info about confusion matrix here: http://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/

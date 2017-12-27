@@ -18,8 +18,15 @@
 # You should have received a copy of the GNU General Public License
 # along with cuttlery.  If not, see <http://www.gnu.org/licenses/>.
 
-"""
-author: Darrin Schultz
+"""title: cuttlery codonplot
+author: Darrin T Schultz - github@conchoecia
+
+This program plots the codon usage of a collection of genes as violin
+plots.  This style of plot more accurately reflects the biological
+variability in codon usage in different protein types. In addition,
+one can plot single or multiple genes as dots to highlight their
+position in the distribution of codon usage frequencies.
+
 """
 from collections import Counter
 import itertools
