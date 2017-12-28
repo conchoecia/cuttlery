@@ -183,12 +183,56 @@ def codonseqs_sliced(codonseqs, windowsize):
     #print("0th codon is: {}".format(codonseqs[0].get_codon(0)))
     return sliced_codonseqs, num_codons
 
-def fasta_dir_to_gene_filelist(fasta_dir):
-    abspath = os.path.abspath(fasta_dir)
-    filelist = {os.path.splitext(x)[0]:os.path.join(abspath, x)
-                for x in os.listdir(fasta_dir)
-                if os.path.splitext(x)[1]}
-    return filelist
+def fasta_dir_to_gene_filelist(fasta_dirs):
+    """
+    This method looks through directories for alignment files and returns
+     a dictionary of {<gene_name>: </path/to/algn/file/gene_name.fasta>}.
+
+    Gene names that are returned in the dictionary object are taken from the
+     filenames. To ensure that downstream plots are readable, use simple file
+     names for the fasta alignment files.
+
+    This accepts a single directory path as a string or an iterable
+     of directory path strings."
+
+    Parameters:
+    <fasta_dirs> - a directory as a string or an iterable that contains
+     directory paths as strings.
+
+    Returns:
+    - A dictionary of {<gene_name>: </path/to/algn/file/gene_name.fasta>}.
+    """
+    #First test if the input is a string, if so put it into a list and
+    # process it in the for loop.
+    if isinstance(fasta_dirs, str):
+        process_list = [fasta_dirs]
+    else:
+        try:
+            process_list = iter(fasta_dirs)
+        except:
+            raise Exception("""The fasta directory that you provided, {},
+            is neither a directory string nor an iterable that contains
+            directories.""".format(fasta_dirs))
+    # Make sure that the process list has stuff in it. It is possible
+    #  that an empty list made it through.
+    if len(list(process_list)) == 0:
+        raise IOError("""The list of fasta directories is length zero.
+        For some reason the program received an empty list of directories
+        of fasta files""")
+    results_dict = {}
+    for single_dir in process_list:
+        for root, dirs, files in os.walk(single_dir):
+            for this_file in files:
+                split_file = os.path.splitext(this_file)
+                # should be a simple file with at least one period
+                if len(split_file) > 1:
+                    # only get the fasta files
+                    filename  = split_file[0]
+                    extension = split_file[-1]
+                    if extension in [".fasta", ".fa"]:
+                        full_path = os.path.abspath(os.path.join(root, this_file))
+                        results_dict[filename] = full_path
+    return results_dict
 
 def fasta_path_to_codonseqs(fasta_path, codon_table, codon_alphabet):
     codonseqs = []
