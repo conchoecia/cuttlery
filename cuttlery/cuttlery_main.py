@@ -222,59 +222,60 @@ def main():
                                         in nonsynonymous and synonymous mutations
                                         to help infer which regions of a protein
                                         are under the heaviest selection.""")
+    parser_hetero.add_argument('--aln_dir',
+                        metavar='aln_dir',
+                        action=FullPaths,
+                        help="""The directory where all the fasta
+                        alignments are contained.""")
+    parser_hetero.add_argument('--dpi',
+                        metavar='dpi',
+                        default=600,
+                        type=int,
+                        help="""Change the dpi from the default 600
+                        if you need it higher.""")
     parser_hetero.add_argument("--fasta_dir",
                         action = FullPaths,
-                        required = True,
                         help = """This is the directory where the fasta file
-                        alignments are located. The filename will be used as the
-                        figure label while plotting.""")
+                        alignments are located. Looks recursively so files can
+                        be in any subdirectory. The filenames of the fasta files
+                        will be used as the figure label while plotting.""")
+    parser_hetero.add_argument('--fileform',
+                        dest='fileform',
+                        choices=['png','pdf', 'eps', 'jpeg', 'jpg',
+                                 'pdf', 'pgf', 'ps', 'raw', 'rgba',
+                                 'svg', 'svgz', 'tif', 'tiff'],
+                        default=['png'],
+                        nargs='+',
+                        help="""Which output format would you like?
+                        Default is png. Select multiple options by putting
+                        a space between them: --fileform png pdf jpg""")
+    parser_hetero.add_argument("--method",
+                        default = 'NG86',
+                        choices = ['NG86', 'LWL85', 'YN00', 'ML'],
+                        help = """This is the method to use in the simulation to
+                        calculate the nonsynonymous and synonymous mutation
+                        sites.""")
+    parser_hetero.add_argument('-o', '--output-basename',
+                        default = "heterogeneity_output",
+                        help='Specify a base name for the output file('
+                        's). The input file base name is the '
+                        'default.')
     parser_hetero.add_argument("--tt_code",
                         type = int,
                         default = 1,
                         help="""Select which gene code to use. Default is
-                        Standard""")
+                        Standard.""")
     parser_hetero.add_argument("--tt_options",
                         action = 'store_true',
                         default = False,
                         help="""Display the optional gene code names that you
                         may pass to the <--tt_code> argument in a subsequent
                         run""")
-    parser_hetero.add_argument("--method",
-                        default = 'NG86',
-                        choices = ['NG86', 'LWL85', 'YN00', 'ML'],
-                        help = """the method to use in the simulation""")
-    parser_hetero.add_argument('--dpi',
-                                metavar='dpi',
-                                default=600,
-                                type=int,
-                                help="""Change the dpi from the default 600
-                                if you need it higher""")
-    parser_hetero.add_argument('--aln_dir',
-                                metavar='aln_dir',
-                                action=FullPaths,
-                                help="""The directory where all the fasta
-                                alignments are contained.""")
-    parser_hetero.add_argument('--fileform',
-                               dest='fileform',
-                               choices=['png','pdf', 'eps', 'jpeg', 'jpg',
-                                        'pdf', 'pgf', 'ps', 'raw', 'rgba',
-                                        'svg', 'svgz', 'tif', 'tiff'],
-                               default=['png'],
-                               nargs='+',
-                               help="""Which output format would you like?
-                               Default is png. Select multiple options by putting
-                               a space between them: --fileform png pdf jpg""")
-    parser_hetero.add_argument('-o', '--output-basename',
-                               default = "heterogeneity_output",
-                               help='Specify a base name for the output file('
-                                's). The input file base name is the '
-                                'default.')
     parser_hetero.add_argument('-T', '--transparent',
-                               action='store_false',
-                               default = True,
-                               help="""Not the TV show. Specifies if
-                               you want a transparent background. Default
-                               is on.""")
+                        action='store_false',
+                        default = True,
+                        help="""Specifies if you want a transparent background.
+                        Default is on.""")
     parser_hetero.set_defaults(func=run_subtool)
 
     #############
