@@ -234,7 +234,8 @@ def main():
                         help="""Change the dpi from the default 600
                         if you need it higher.""")
     parser_hetero.add_argument("--fasta_dir",
-                        action = FullPaths,
+                        action = FullPathsList,
+                        nargs = '+',
                         help = """This is the directory where the fasta file
                         alignments are located. Looks recursively so files can
                         be in any subdirectory. The filenames of the fasta files

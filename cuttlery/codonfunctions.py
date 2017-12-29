@@ -25,7 +25,7 @@ purpose: common functions shared by codon-related things in cuttlery
 """
 
 # imports
-import os
+import os, time
 import pandas as pd
 import numpy as np
 
@@ -174,10 +174,11 @@ def codonseqs_sliced(codonseqs, windowsize):
             #  codons iteratively
             for k in range(windowsize):
                 this_slice += codonseqs[j].get_codon(i+k)
-            #print("this_slice: {}".format(this_slice))
+            #print("this_slice[i][j]:[{0}][{1}] {2}".format(i, j, this_slice))
             this_CodonSeq = CodonSeq(this_slice, alphabet = codon_alphabet)
             this_CodonSeq.id = codon_id
             this_codonseqs_list.append(this_CodonSeq)
+            #print("here's a single codon seq: {}".format(this_CodonSeq))
         sliced_codonseqs.append(this_codonseqs_list)
 
     #print("0th codon is: {}".format(codonseqs[0].get_codon(0)))
@@ -215,12 +216,12 @@ def fasta_dir_to_gene_filelist(fasta_dirs):
             directories.""".format(fasta_dirs))
     # Make sure that the process list has stuff in it. It is possible
     #  that an empty list made it through.
-    if len(list(process_list)) == 0:
+    if len(fasta_dirs) == 0:
         raise IOError("""The list of fasta directories is length zero.
         For some reason the program received an empty list of directories
         of fasta files""")
     results_dict = {}
-    for single_dir in process_list:
+    for single_dir in fasta_dirs:
         for root, dirs, files in os.walk(single_dir):
             for this_file in files:
                 split_file = os.path.splitext(this_file)
@@ -232,6 +233,8 @@ def fasta_dir_to_gene_filelist(fasta_dirs):
                     if extension in [".fasta", ".fa"]:
                         full_path = os.path.abspath(os.path.join(root, this_file))
                         results_dict[filename] = full_path
+    if len(results_dict) == 0:
+        raise Exception("this search yielded no fasta files")
     return results_dict
 
 def fasta_path_to_codonseqs(fasta_path, codon_table, codon_alphabet):
@@ -251,10 +254,13 @@ def fasta_path_to_seqs(fasta_path, codon_table=False, codon_alphabet=False):
         seqs.append(record)
     return seqs
 
-def print_images(base_output_name, image_formats, dpi, transparent=False):
+def print_images(base_output_name, image_formats, dpi, path = None, transparent=False):
     file_base = os.path.splitext(os.path.basename(base_output_name))[0]
     for fmt in image_formats:
-        out_name = "{}.{}".format(file_base, fmt)
+        if path:
+            out_name = path
+        else:
+            out_name = "{0}_{1}.{2}".format(file_base, timestamp(), fmt)
         try:
             if fmt == 'png':
                 plt.savefig(out_name, dpi=dpi, transparent=transparent)
@@ -288,7 +294,10 @@ def seqs_to_df(seqs):
     names_list = []
     for index in range(len(seqs)):
         names_list.append(seqs[index].id)
-    newseqs = [[char for char in str(thisseq.seq)] for thisseq in seqs]
+    if isinstance(seqs[0], CodonSeq):
+        newseqs = [[char for char in str(thisseq)] for thisseq in seqs]
+    else:
+        newseqs = [[char for char in str(thisseq.seq)] for thisseq in seqs]
     df = pd.DataFrame.from_items(zip(names_list, newseqs))
     return df
 
@@ -311,3 +320,9 @@ def seqfreqs(seqs):
     #if "seqfreqs" in options.debug:
     #    print("the frequencies are {}".format(x))
     return x
+
+def timestamp():
+    """
+    Returns the current time in :samp:`YYYY-MM-DD HH:MM:SS` format.
+    """
+    return time.strftime("%Y%m%d_%H%M%S")

@@ -31,7 +31,7 @@ sequences are represented by sticks and a density plot.
 #info about confusion matrix here: http://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/
 
 #Python/System stuff
-import os, sys, time
+import os, sys
 
 # Biopython stuff
 from Bio import SeqIO
@@ -44,39 +44,39 @@ from Bio.codonalign.codonseq import _get_pi
 import pandas as pd
 
 # cuttlery stuff
-from cuttlery.codonfunctions import fasta_dir_to_gene_filelist, fasta_path_to_codonseqs,\
-    seqs_to_df, calculate_pi, seqfreqs, calculate_piN_piS, codonseqs_sliced
+from cuttlery.codonfunctions import fasta_dir_to_gene_filelist,\
+    fasta_path_to_codonseqs,\
+    seqs_to_df, calculate_pi,\
+    seqfreqs, calculate_piN_piS,\
+    codonseqs_sliced, print_images
 
 # plotting stuff
-#plotting stuff
 import matplotlib
 #matplotlib.use('agg')
 import matplotlib.pyplot as plt
-#import matplotlib.mlab as mlab
-#from matplotlib import cm
 import matplotlib.patches as mplpatches
-#from matplotlib.colors import LinearSegmentedColormap
-#from matplotlib.path import Path
+from matplotlib import rc
+import seaborn as sns
 
 #set font to helvetica
-global hfont
-hfont = {'fontname':'Helvetica'}
+#global hfont
+#hfont = {'fontname':'Helvetica'}
 
-from matplotlib import rc
+# set seaborn stuff
+sns.set(rc={'text.usetex' : True})
+sns.set_style("whitegrid", {'font.family': ['sans-serif'],
+                            'font.sans-serif': ['Helvetica'],
+                            'grid.color': '.95'})
+
 rc('text', usetex=True)
 plt.rcParams['text.latex.preamble'] = [
+        r'\usepackage{siunitx}',    # micro symbols
+        r'\sisetup{detect-all}',   # ...this to force siunitx to actually use your fonts
         r'\usepackage{tgheros}',    # helvetica font
         r'\usepackage{sansmath}',   # math-font matching  helvetica
         r'\sansmath'                # actually tell tex to use it!
-        r'\usepackage{siunitx}',    # micro symbols
         r'\sisetup{detect-all}',    # force siunitx to use the fonts
         ]
-
-def timestamp():
-    """
-    Returns the current time in :samp:`YYYY-MM-DD HH:MM:SS` format.
-    """
-    return time.strftime("%Y%m%d_%H%M%S")
 
 def run(args):
     heterogeneity(args)
@@ -93,23 +93,32 @@ def heterogeneity(options):
     #1.5 get a list of files from the directory we provided.
     # This is a dict object with filesnames as keys
     filelist = fasta_dir_to_gene_filelist(options.fasta_dir)
-    print(filelist)
+    # print("This is the file list", filelist)
 
     #second, select the codon alphabet to use
     codon_alphabet = get_codon_alphabet(Bio.Data.CodonTable.generic_by_id[options.tt_code], gap_char="-")
     codon_table =    Bio.Data.CodonTable.generic_by_id[options.tt_code]
 
     # now iterate through all genes in the file list and calculate piNpiS for
-    #  each codon in the alignment.
+    #  each codon in the alignment. We use windowsize=1 because we are determining
+    #  if every site is nonsynonymous or synonymous mutation. See #notes for
+    #  details on what excactly is going on since this bit is confusing.
     windowsize = 1
+    # #notes all of the results of this program are saved to the results_file
+    #  in tab-delimited format. The processing time is time-consuming, so this
+    #  saves time when one just wants to plot.
     results_file = "{}.csv".format(options.output_basename)
     # If we've already done an analysis and the file is there already
     #  don't bother to do it again, but instead just plot
     if not os.path.exists(results_file):
         all_results = []
         for genename in filelist:
+            print("looking at this gene", genename)
             codonseqs = fasta_path_to_codonseqs(filelist[genename], codon_table, codon_alphabet)
+            #print("these are the codonseqs", codonseqs)
             sliced_codonseqs, num_codons = codonseqs_sliced(codonseqs, windowsize)
+            #print("these are the sliced_codons. len={}", sliced_codonseqs, len(sliced_codonseqs))
+            #print("there are {} codons".format(num_codons))
             # For each element in the list of CodonSeqs, calculate piN, piS, pi and
             #  save that info along with the codon index of the gene
             for i in range(len(sliced_codonseqs)):
@@ -135,10 +144,13 @@ def heterogeneity(options):
         results_df.to_csv(results_file, index = False)
     else:
         print("\nFound {} so skipping analysis\n".format(results_file))
-        results_df = pd.read_csv(results_file) 
-    plot_results(results_df)
+        results_df = pd.read_csv(results_file)
+    plot_results(results_df,
+                 transparent=options.transparent,
+                 dpi=options.dpi,
+                 fileform = options.fileform)
 
-def plot_results(df):
+def plot_results(df, **kwargs):
     #plt.style.use('BME163')
     ##set the figure dimensions
     #figWidth = 5
@@ -163,38 +175,39 @@ def plot_results(df):
     ##panel0.spines['right'].set_visible(False)
     ##panel0.spines['left'].set_visible(False)
 
-    import seaborn as sns
-    sns.set_style("whitegrid")
     inner = "sticks"
     width = 0.8
-    delta = 0.1
+    delta = 0.03
     final_width = width - delta
     seqnames = sorted(df['seqname'].unique())
-    ax = sns.violinplot(x="piNSsite", y="seqname", hue="piNorS",
+    ax = sns.violinplot(x="piNSsite", y="seqname",
+                  hue="piNorS", hue_order = ["piN", "piS"],
                   data=df, palette="Set2", split=True,
                   scale="width", inner=inner,
                   scale_hue=False, bw=.1,
                   cut = 0, dodge = True,
                   width = final_width,
-                  order = seqnames,
-                  legend = False)
+                  order = seqnames)
 
-    ax.legend(loc='best') 
+    ax.legend(loc='best')
+    # took this bit of code to change the legend labels from here:
+    #  https://stackoverflow.com/questions/45201514/
+    new_labels = [r'$\mathrm{\pi}$ N', r'$\mathrm{\pi}$ S']
+    for t, l in zip(ax.legend_.texts, new_labels): t.set_text(l)
     offset_violinplot_halves(ax, delta, final_width, inner, 'horizontal')
 
     # now that we have plotted the piN and piS distributions, plot a solid line
     #  indicating the whole length of the gene
-
-
     gene_lens = {seqname:max(df.loc[df['seqname'] == seqname, 'slice_stop'])
                  for seqname in seqnames}
     global_max_len = max(gene_lens.values())
     rectangle_patches = []
+    #This just plots all the gene lengths as rectangles
     for genenamekey in gene_lens:
         left = 0
-        bottom = seqnames.index(genenamekey)-(delta/2)
+        height = 0.1
+        bottom = seqnames.index(genenamekey)-(height/2)
         width = gene_lens[genenamekey]
-        height = delta
         rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
                                     linewidth=0.0,\
                                     facecolor='black',\
@@ -203,6 +216,7 @@ def plot_results(df):
         rectangle_patches.append(rectangle1)
 
     for patch in rectangle_patches:
+        patch.set_zorder(20)
         ax.add_patch(patch)
 
     ax.spines['top'].set_visible(False)
@@ -212,7 +226,13 @@ def plot_results(df):
     ax.set_ylabel('')
     ax.set_xlabel('Codon Number')
     ax.set_title('Density of nucleotide diversity')
-    plt.savefig("ND_diversity_{}.png".format(timestamp()), dpi=600, transparent=False)
+
+    # Print image(s)
+    print_images(
+        base_output_name="ND_diversity",
+        image_formats=kwargs["fileform"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
 
 def offset_violinplot_halves(ax, delta, width, inner, direction):
     """
@@ -258,7 +278,6 @@ def offset_violinplot_halves(ax, delta, width, inner, direction):
                     data += delta
                 line.set_xdata(data)
 
-
     for ii, item in enumerate(ax.collections):
         # axis contains PolyCollections and PathCollections
         if isinstance(item, matplotlib.collections.PolyCollection):
@@ -282,6 +301,9 @@ def offset_violinplot_halves(ax, delta, width, inner, direction):
 
 def _wedge_dir(vertices, direction):
     """
+    This has some function with turning the split violinplot horizontally or
+    vertically.
+
     Args:
       <vertices>  The vertices from matplotlib.collections.PolyCollection
       <direction> Direction must be 'horizontal' or 'vertical' according to how
