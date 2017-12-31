@@ -175,28 +175,25 @@ def main():
     parser_dirichlet = subparsers.add_parser('dirichlet',
                                         help="""Determine if unknown sequences
                                         better fit coding or noncoding sequences.""")
-    parser_dirichlet.add_argument("--tt_code",
-                        type = int,
-                        default = 4,
-                        help="""Select which gene code to use. Default is
-                        Standard""")
-    parser_dirichlet.add_argument("--tt_options",
-                        action = 'store_true',
-                        default = False,
-                        help="""Display the optional gene code names that you
-                        may pass to the <--tt_code> argument in a subsequent
-                        run""")
-    parser_dirichlet.add_argument("--plot",
-                        action = 'store_true',
-                        default = False,
-                        help="""Plot the data file""")
     parser_dirichlet.add_argument("--coding_dir",
                         action = FullPaths,
                         help = """The directory with known coding sequences.""")
-    parser_dirichlet.add_argument("--test_dir",
-                        action = FullPaths,
-                        help = """The directory with unknown sequences to
-                        test.""")
+    parser_dirichlet.add_argument('--dpi',
+                        metavar='dpi',
+                        default=600,
+                        type=int,
+                        help="""Change the dpi from the default 600
+                        if you need it higher.""")
+    parser_dirichlet.add_argument('--fileform',
+                        dest='fileform',
+                        choices=['png','pdf', 'eps', 'jpeg', 'jpg',
+                                 'pdf', 'pgf', 'ps', 'raw', 'rgba',
+                                 'svg', 'svgz', 'tif', 'tiff'],
+                        default=['png'],
+                        nargs='+',
+                        help="""Which output format would you like?
+                        Default is png. Select multiple options by putting
+                        a space between them: --fileform png pdf jpg""")
     parser_dirichlet.add_argument("--noncoding_dir",
                         action = FullPaths,
                         help = """The directory with noncoding sequences to
@@ -205,13 +202,39 @@ def main():
                         default = 10,
                         type = int,
                         help = """number of simulations per gene.""")
+    parser_dirichlet.add_argument('-o', '--output-basename',
+                        default = "dirichlet",
+                        help="""Specify a base name for the output file('
+                        's). The input file base name is the '
+                        'dirichlet.' Do not include any trailing periods,
+                        characters, or file extensions in the basename.""")
     parser_dirichlet.add_argument("--results_file",
                         action = FullPaths,
                         help = """this saves the data to a csv file""")
-    parser_dirichlet.add_argument("--threads",
+    parser_dirichlet.add_argument('-s', '--sort_type',
+                        choices=['alpha','meaninc','meandec',
+                                 'medinc','meddec'],
+                        default='alpha',
+                        help="""How to sort the genes in the violinplot.
+                        Select one option.
+                        - 'alpha': alphabetical by gene name
+                        - 'meaninc': increasing mean of log likelihood
+                        - 'meandec': decreasing mean of log likelihood
+                        - 'medinc' : increasing median of log likelihood
+                        - 'meddec' : decreasing median of log likelihood""")
+    parser_dirichlet.add_argument("--test_dir",
+                        action = FullPaths,
+                        help = """The directory with unknown sequences to
+                        test.""")
+    parser_dirichlet.add_argument("-@", "--threads",
                         type = int,
                         default = 2,
                         help="""The number of threads to use""")
+    parser_dirichlet.add_argument('-T', '--transparent',
+                        action='store_false',
+                        default = True,
+                        help="""Specifies if you want a transparent background.
+                        Default is on.""")
     parser_dirichlet.set_defaults(func=run_subtool)
 
     ###############
@@ -222,11 +245,6 @@ def main():
                                         in nonsynonymous and synonymous mutations
                                         to help infer which regions of a protein
                                         are under the heaviest selection.""")
-    parser_hetero.add_argument('--aln_dir',
-                        metavar='aln_dir',
-                        action=FullPaths,
-                        help="""The directory where all the fasta
-                        alignments are contained.""")
     parser_hetero.add_argument('--dpi',
                         metavar='dpi',
                         default=600,
@@ -326,7 +344,7 @@ def main():
                         type = int,
                         help = """the results will be written to this file as a
                         csv.""")
-    parser_piNpiS.add_argument("--threads",
+    parser_piNpiS.add_argument("-@","--threads",
                         required = False,
                         type = int,
                         help = """The num threads to attempt to use.""")
@@ -353,8 +371,11 @@ def main():
                  'calculate-pi' : parser_calcpi.print_help}
 
     if len(sys.argv)==2:
-        exec("import cuttlery.{} as temp_name".format(
-            args.command.replace("-", "_")), globals())
+        if sys.argv[1] == "dirichlet":
+            import cuttlery.codon_dirichlet_test as temp_name
+        else:
+            exec("import cuttlery.{} as temp_name".format(
+                args.command.replace("-", "_")), globals())
         print(temp_name.__doc__)
         commandDict[args.command]()
         sys.exit(1)

@@ -54,13 +54,19 @@ from matplotlib import cm
 import os
 import pandas as pd
 from sklearn.metrics import confusion_matrix as cmcalc
+
+# multiprocessing stuff
 from multiprocessing import cpu_count
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
 import time
-
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# cuttlery.codonfunctions stuff
+from cuttlery.codonfunctions import fasta_dir_to_gene_filelist, timestamp,\
+    print_images
+
 
 from matplotlib import rc
 rc('text', usetex=True)
@@ -203,11 +209,26 @@ def gen_codons(seq):
     a string of length 3"""
     return [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
 
-# arguments are one test sequence and two lists of sequences representing the two hypothesis groups
-# pseudocounts are added to each codon
-# verbose flag toggles whether test will be interpreted for you on stdout
 def codon_dirichlet_log_likelihood_ratio(test_seq, seq_list_1, seq_list_2,
                                          pseudocounts = 0.5, verbose = True):
+    """
+    This method takes one test sequence and two lists of sequences representing
+    the two hypothesis groups. This method determines the log likelihood
+    probability, then log likelihood ratio of whether the trinucleotide frequency
+    of the test sequence more closely matches the trinucleotide frequency of
+    hypothesis sequence list 1 or hypothesis sequence list 2.
+
+    Parameters:
+     <test_seq>
+     <seq_list_1>
+     <seq_list_2>
+     <pseudocounts>
+     <verbose> -  This flag toggles whether test will be interpreted for you on
+       stdout or not.
+
+    Author:
+    - Jordan M Eizenga (github@jeizenga)
+    """
     # check for data invariants
     assert len(test_seq) % 3 == 0
     for nt in test_seq:
@@ -249,15 +270,15 @@ def codon_dirichlet_log_likelihood_ratio(test_seq, seq_list_1, seq_list_2,
 
 def gen_noncodingseq_dict(fasta_directory):
     """This function takes a filepath of the fasta file that contains the
-    noncoding sequences to use in the analysis.  Instead of manually
-    generating all three artificial reading frames, the function
-    generates them automatically and returns in dict format.
+    noncoding sequences to use in the analysis. The method then
+    generates all three artificial reading frames and returns in dict format.
     The keys are the sequence name and the values are a list of sequences.
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
     """
     seqdict = {}
-    filelist = {os.path.splitext(os.path.basename(x))[0]:os.path.join(os.path.abspath(fasta_directory), x)
-                for x in os.listdir(fasta_directory)
-                if os.path.splitext(os.path.basename(x))[1] == ".fasta"}
+    filelist = fasta_dir_to_gene_filelist(fasta_directory)
 
     for genename in filelist:
         seqs = []
@@ -290,14 +311,14 @@ def gen_noncodingseq_dict(fasta_directory):
 
 def gen_codingseqs_dict(fasta_directory):
     """This opens a directory of fasta files and reads them into a dictionary.
-    The keys are the sequence name and the values are a list of sequences"""
-    #1.5 get a list of files from the directory we provided.
-    # This is a dict object with key as
-    seqdict = {}
-    filelist = {os.path.splitext(os.path.basename(x))[0]:os.path.join(os.path.abspath(fasta_directory), x)
-                for x in os.listdir(fasta_directory)
-                if os.path.splitext(os.path.basename(x))[1] == ".fasta"}
+    This method does not recirsively search for fasta files, but only
+    The keys are the sequence name and the values are a list of sequences
 
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
+    seqdict = {}
+    filelist = fasta_dir_to_gene_filelist(fasta_directory)
     for genename in filelist:
         seqs = []
         for record in SeqIO.parse(filelist[genename], "fasta"):
@@ -324,7 +345,11 @@ def gen_codingseqs_dict(fasta_directory):
 
 def remove_3p_stops(seq):
     """This function removes the 3' terminal stop codons from a DNA sequence
-    formatted as a python string. Just returns the original sequence otherwise
+    formatted as a python string. It just returns the original sequence
+    otherwise.
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
     """
     codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
     if codons[-1] in stops:
@@ -336,6 +361,15 @@ def remove_3p_stops(seq):
 def remove_deletions(seq):
     """This function removes codons that contain deletions. For example, the
     following codons would be removed '---', 'A--', '-G-', 'T-A', et cetera.
+
+    This is important in the analysis because deletions/gaps in a codon are
+    often ambiguous for frameshifts or unknown bases. In this case, we assume
+    that the user has provided a completely in-frame sequence and that any '-'
+    characters are unknown bases. Including such bases in the analysis would
+    interfere with the dirichlet distribution.
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
     """
     codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3) if '-' not in seq[i:i+3]]
     return "".join([item for sublist in codons for item in sublist])
@@ -343,6 +377,9 @@ def remove_deletions(seq):
 def remove_5p_starts(seq):
     """This function removes 5' start codons from sequences if they are present.
     Returns the original sequence otherwise.
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
     """
     codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
     if codons[0] in starts:
@@ -353,18 +390,30 @@ def remove_5p_starts(seq):
 
 def remove_all_stops(seq):
     """This function removes all stop codons from a sequence.
+    Author:
+    - Darrin T Schultz (github@conchoecia)
     """
     codons = [seq[i:i+3] for i in np.arange(0, len(seq), 3) if seq[i:i+3] not in stops]
     return "".join([item for sublist in codons for item in sublist])
 
-# estimates the power and false positive rate for the test based on a set of
-# simulated positive and negative results
-# takes the log likelihood of a test, a list of log likelihoods from leave-one-out
-# positive simulations, and a list of log likelihoods leave-one-out negative
-# simulations as inputs
 def estimate_power_and_false_pos(log_likelihood_score, positive_simulations,
                                  negative_simulations):
+    """
+    This method estimates the power and false positive rate for a single test
+    based on a set of simulated positive and negative results.
 
+    As inputs, the method takes the log likelihood value of a test, a list of
+    log likelihood values from leave-one-out positive simulations, and a
+    list of log likelihood values from leave-one-out negative simulations.
+
+    Parameters:
+    <log_likelihood_score> -
+    <positive_simulations> -
+    <negative_simulations -
+
+    Author:
+    - Jordan M Eizenga (github@jeizenga)
+    """
     false_pos = np.mean(np.greater(negative_simulations, log_likelihood_score))
     power = np.mean(np.greater(positive_simulations, log_likelihood_score))
     return false_pos, power
@@ -420,7 +469,6 @@ def plot_ratios(results_df):
                                                 nc_llratios)
         print("{}: power = {}, false_pos = {}".format(name, power, false_pos))
 
-
     fig, ax = plt.subplots()
     ax.hist(coding_llratios, bins='auto', label = 'coding',
             color='lightblue', alpha=0.5, normed=True)
@@ -439,12 +487,6 @@ def plot_ratios(results_df):
     ax.margins(0.05)
     ax.set_ylim(bottom=0)
     plt.savefig("dirichlet_results_{}.png".format(timestamp()), dpi=600, transparent=False)
-
-def timestamp():
-    """
-    Returns the current time in :samp:`YYYY-MM-DD HH:MM:SS` format.
-    """
-    return time.strftime("%Y%m%d_%H%M%S")
 
 def LOO_analysis_chunk(args):
     """randomly performs one leave-one-out analysis"""
@@ -535,6 +577,9 @@ def unknown_seq_analysis_chunk(args):
     return results
 
 def dirichlet(args):
+    outfile = sys.stderr
+    print("{} - cuttlery dirichlet.".format(timestamp()), file = outfile)
+    print("{} - reading options.".format(timestamp()), file = outfile)
     #First, read in the options
     global options
     options = args
@@ -543,10 +588,16 @@ def dirichlet(args):
     if results_file == None:
         raise IOError("""You must specify a name for a results file. If you already
         have results and just want to plot your data, pass the existing file to --results_file""")
-    chunksize = 60
+    chunksize = 60 # this is the optimum chunk size for parallelization
     # If we've already done an analysis and the file is there already
     #  don't bother to do it again, but instead just plot
     if not os.path.exists(results_file):
+        print("""{} - Couldn't find the results file, {}""".format(
+            timestamp(), results_file), file = outfile)
+        print("""{} - Starting analysis""".format(
+            timestamp()), file = outfile)
+        print("""{} - Looking for coding, noncoding, test fasta directories.""".format(
+            timestamp()), file = outfile)
         # check that the test_dir, coding dir, and noncoding dir exist and that
         # they have fasta files inside
         for dir_type, check_dir in (("noncoding_dir", options.noncoding_dir),
@@ -557,12 +608,14 @@ def dirichlet(args):
                 for the fasta files for analysis. We couldn't find the {}: {}.
                 Please make sure that this directory exists.""".format(
                     results_file, dir_type, check_dir))
-           ## In the future I should implement something to check that there are
-           ##  some fasta files in this directory. Not sure if it is necessary right now though. 
         ##first generate a list of individuals of the sequence to test
+        print("""{} - Processing test sequences.""".format(timestamp()), file = outfile)
         testseqs_dict = gen_codingseqs_dict(options.test_dir)
         #Then get a list of the known sequences
+        print("""{} - Processing known coding sequences.""".format(timestamp()), file = outfile)
+
         codingseqs_dict = gen_codingseqs_dict(options.coding_dir)
+        print("""{} - Processing noncoding sequences and generating pseudocodons.""".format(timestamp()), file = outfile)
         ncseqs_dict = gen_noncodingseq_dict(options.noncoding_dir)
         # then get the list of lists of noncoding sequences.
         # We first have to pass the argument of how many copies of each gene there
@@ -575,7 +628,7 @@ def dirichlet(args):
                            'n_iterations': chunksize}
         # perform the test analyses of the unknown seqs
         num_simulations = int(options.numsims/chunksize) * len(testseqs_dict.keys())
-        print("please wait, preparing test_seqs analyses")
+        print("""{} - Performing test_seqs analyses.""".format(timestamp()), file = outfile)
         results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
                                    unknown_seq_analysis_chunk, n_jobs = options.threads,
                                    use_kwargs = False, front_num=3)
@@ -584,24 +637,30 @@ def dirichlet(args):
 
         num_gene_simulations = int(options.numsims/chunksize) * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
         ## now perform the LOO analyses of all the known coding and nc seqs
-        print("please wait, preparing loo analyses")
+        print("""{} - Performing leave-one-out analyses.""".format(timestamp()), file = outfile)
         results = parallel_process([seqs_dicts_args for x in range(num_gene_simulations)],
                                    LOO_analysis_chunk, n_jobs = options.threads,
                                    use_kwargs = False, front_num=3)
         flat_results = [item for sublist in results for item in sublist]
 
         results_dict_list += flat_results
+        print("""{} - Converting results to dataframe.""".format(timestamp()), file = outfile)
         results_df = pd.DataFrame.from_dict(results_dict_list)
         print(results_df)
+        print("""{} - Saving results to {}.""".format(
+            timestamp(), results_file), file = outfile)
         results_df.to_csv(results_file, index=False)
     else:
-        print("found {} so skipping analysis".format(results_file))
+        print("""{} - Found the results file: {}.""".format(
+            timestamp(), results_file), file = outfile)
+        print("""{} - Loading the results file.""".format(
+            timestamp()), file = outfile)
         results_df = pd.read_csv(results_file, index_col = False)
 
-    if options.plot:
-        #plot_results(results_df)
-        plot_results_simple(results_df)
-
+    print("""{} - Plotting with all genes separated.""".format(timestamp()), file = outfile)
+    plot_results_simple(results_df, **vars(options))
+    print("""{} - Plotting with all genes overlaid.""".format(timestamp()), file = outfile)
+    plot_results(results_df, **vars(options))
 
     # now output statistics about the data
     real_val = results_df.loc[results_df['analysis_type'] == 'LOO', 'real_val']
@@ -625,8 +684,9 @@ def dirichlet(args):
         print("{} marginalized false positive rate: {}".format(seqname, false_pos))
         print("{} power: {}".format(seqname, power))
 
-def plot_results(results):
-    print(results.head())
+def plot_results(results, **kwargs):
+    if kwargs.get("debug"):
+        print(results.head())
     plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
@@ -659,9 +719,10 @@ def plot_results(results):
     coding_seqnames = sorted(codings['seqname'].unique())
     tests_seqnames = sorted(tests['seqname'].unique())
 
-    print(noncoding_seqnames)
-    print(coding_seqnames)
-    print(tests_seqnames)
+    if kwargs.get("debug"):
+        print(noncoding_seqnames)
+        print(coding_seqnames)
+        print(tests_seqnames)
 
     # autumn colors for noncoding
     cmap = cm.get_cmap('autumn')
@@ -678,7 +739,8 @@ def plot_results(results):
     xmin= int(min(results['ll_ratio']))
     xmax= np.ceil(max(results['ll_ratio']))
     bins = np.linspace(xmin, xmax, 500)
-    print("autumn", autumn)
+    if kwargs.get("debug"):
+        print("autumn", autumn)
     # first get the noncoding data
     noncoding_colors = [autumn[noncoding_seqname] for noncoding_seqname in noncoding_seqnames]
     noncoding_data = [noncodings.query("seqname == '{}'".format(nc_seqname))['ll_ratio'] \
@@ -713,9 +775,14 @@ def plot_results(results):
     panel0.set_xlabel("Log-likelihood ratio")
     panel0.set_ylabel("Normalized Observation Proportions")
     panel0.set_title("Codon Usage Log-likelihood Ratios")
-    plt.savefig("dirichlet_histogram_{}.png".format(timestamp()), dpi=600, transparent=False)
+    # Print image(s)
+    print_images(
+        base_output_name= kwargs["output_basename"] + "_histogram",
+        image_formats=kwargs["fileform"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
 
-def plot_results_simple(results):
+def plot_results_simple(results, **kwargs):
     plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
@@ -725,7 +792,7 @@ def plot_results_simple(results):
     panelWidth = 4
     panelHeight = 2.5
     #find the margins to center the panel in figure
-    leftMargin = (figWidth - panelWidth)/2 
+    leftMargin = (figWidth - panelWidth)/2
     bottomMargin = ((figHeight - panelHeight)/2)
     panel0 =plt.axes([leftMargin/figWidth, #left
                      bottomMargin/figHeight,    #bottom
@@ -740,21 +807,46 @@ def plot_results_simple(results):
     panel0.spines['right'].set_visible(False)
     panel0.spines['left'].set_visible(False)
 
+    # Subset the dataframes to separate the noncoding seqs, et cetera.
+    #  This makes them easier to process.
     noncodings = results[results['real_val'] == 'noncoding']
     codings = results[results['real_val'] == 'coding']
     tests = results[results['analysis_type'] == 'test']
 
+    # Get the seqnames and organize somehow
     noncoding_seqnames = sorted(noncodings['seqname'].unique())
     coding_seqnames = sorted(codings['seqname'].unique())
     tests_seqnames = sorted(tests['seqname'].unique())
+    if kwargs.get("sort_type") in ["meaninc", "meandec", "medinc", "meddec"]:
+        decreasing = False
+        if kwargs.get("sort_type") in ["meandec","meddec"]:
+            decreasing = True
+        if kwargs.get("sort_type") in ["meaninc","meandec"]:
+            sorton = "mean"
+        elif kwargs.get("sort_type") in ["medinc","meddec"]:
+            sorton = "median"
+
+
+        noncoding_seqnames = _sorted_by_mean_ll(noncoding_seqnames,
+                                                noncodings, sorton,
+                                                decreasing = decreasing)
+        coding_seqnames = _sorted_by_mean_ll(coding_seqnames,
+                                             codings, sorton,
+                                             decreasing = decreasing)
+        tests_seqnames = _sorted_by_mean_ll(tests_seqnames,
+                                            tests, sorton,
+                                            decreasing = decreasing)
+
+        #write a function to sort by mean
     all_seqnames = noncoding_seqnames + tests_seqnames + coding_seqnames
 
     data_lists = [list(results.loc[results['seqname'] == seqname, 'll_ratio']) for
                   seqname in all_seqnames]
 
-    print(noncoding_seqnames)
-    print(coding_seqnames)
-    print(tests_seqnames)
+    if kwargs.get("debug"):
+        print(noncoding_seqnames)
+        print(coding_seqnames)
+        print(tests_seqnames)
 
     # autumn colors for noncoding
     cmap = cm.get_cmap('autumn')
@@ -774,10 +866,10 @@ def plot_results_simple(results):
     coding_colors = [winter[coding_seqname] for coding_seqname in coding_seqnames]
     tests_colors = [magma[tests_seqname] for tests_seqname in tests_seqnames]
     all_colors = noncoding_colors + tests_colors + coding_colors
-    print(all_colors)
+    if kwargs.get("debug"):
+        print(all_colors)
 
     plt.axvline(x=0, color=(0,0,0,0.5), linewidth=0.5)
-
 
     positions = []
     counter = -1
@@ -829,7 +921,8 @@ def plot_results_simple(results):
 
         # Put the test sequences on individually
         for i in range(len(tests_seqnames)):
-            print(coding_seqnames[i])
+            if kwargs.get("debug"):
+                print(coding_seqnames[i])
             thismin = tests.loc[tests['seqname'] == tests_seqnames[i], 'll_ratio'].min()
             thismax = tests.loc[tests['seqname'] == tests_seqnames[i], 'll_ratio'].max()
             leftdif = abs(xmax - thismax)
@@ -869,7 +962,6 @@ def plot_results_simple(results):
         plot_right_facing_bracket(panel0, codingtext_xmins, codingtext_ymaxes,
                                  codingtext_ymins, ax_width, "coding")
 
-
     else:
         # this is here because I need to align the tick labels
         # https://stackoverflow.com/questions/15882249/
@@ -885,11 +977,40 @@ def plot_results_simple(results):
     panel0.set_xlabel("Log-likelihood ratio")
     panel0.set_title("Codon Usage Log-likelihood Ratios")
 
-
     #plt.show()
-    plt.savefig("dirichlet_violins.png", dpi=600, transparent=True)
+    # Print image(s)
+    print_images(
+        base_output_name= kwargs["output_basename"] + "_violins",
+        image_formats=kwargs["fileform"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
 
-    #plt.savefig("dirichlet_histogram_{}.png".format(timestamp()), dpi=600, transparent=False)
+def _sorted_by_mean_ll(genenames, df, sorton, **kwargs):
+    """This method returns a list of gene names organized by the mean value
+    of log-likelihoods of all simulations for that gene.
+
+    As input, this method takes an iterable of gene names and a pandas
+    dataframe containing the following information (for example).
+
+      analysis_type   ll_ratio observed real_val seqname
+    0          test  29.198217   coding      NaN     UNK
+    1          test  25.050107   coding      NaN    ND2L
+    2          test  31.772205   coding      NaN     UNK
+    3          test  21.590106   coding      NaN    ND2L
+    4          test  33.697691   coding      NaN     UNK
+    """
+    try:
+        kwargs["decreasing"]
+    except:
+        raise Exception("You need to specify if the sort is increasing or decreasing")
+    print(sorton)
+    gene_mean_dict = {x:getattr(df.loc[df['seqname'] == x, 'll_ratio'],sorton)
+                     for x in genenames}
+    print(gene_mean_dict)
+    sorted_values = sorted(gene_mean_dict, key = gene_mean_dict.get,
+                           reverse = kwargs.get("decreasing"))
+    print("sorted values", sorted_values)
+    return sorted_values
 
 def plot_left_facing_bracket(panel, xmaxes, ymaxes, ymins, ax_width, text):
     nct_xmax = max(xmaxes)
@@ -964,12 +1085,6 @@ def plot_right_facing_bracket(panel, xmins, ymaxes, ymins, ax_width, text):
                     horizontalalignment='right',
                     rotation = 90,
                     color='black', fontsize=10)
-
-def timestamp():
-    """
-    Returns the current time in :samp:`YYYY-MM-DD HH:MM:SS` format.
-    """
-    return time.strftime("%Y%m%d_%H%M%S")
 
 def run(args):
     dirichlet(args)

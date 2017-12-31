@@ -184,7 +184,7 @@ def codonseqs_sliced(codonseqs, windowsize):
     #print("0th codon is: {}".format(codonseqs[0].get_codon(0)))
     return sliced_codonseqs, num_codons
 
-def fasta_dir_to_gene_filelist(fasta_dirs):
+def fasta_dir_to_gene_filelist(fasta_dirs, debug = False):
     """
     This method looks through directories for alignment files and returns
      a dictionary of {<gene_name>: </path/to/algn/file/gene_name.fasta>}.
@@ -203,10 +203,15 @@ def fasta_dir_to_gene_filelist(fasta_dirs):
     Returns:
     - A dictionary of {<gene_name>: </path/to/algn/file/gene_name.fasta>}.
     """
+    if debug:
+        print("fasta_dirs", fasta_dirs)
     #First test if the input is a string, if so put it into a list and
     # process it in the for loop.
     if isinstance(fasta_dirs, str):
         process_list = [fasta_dirs]
+        if debug:
+            print("fasta_dirs is a string")
+            print("process_list", process_list)
     else:
         try:
             process_list = iter(fasta_dirs)
@@ -221,7 +226,9 @@ def fasta_dir_to_gene_filelist(fasta_dirs):
         For some reason the program received an empty list of directories
         of fasta files""")
     results_dict = {}
-    for single_dir in fasta_dirs:
+    for single_dir in process_list:
+        if debug:
+            print("single_dir is", single_dir)
         for root, dirs, files in os.walk(single_dir):
             for this_file in files:
                 split_file = os.path.splitext(this_file)
