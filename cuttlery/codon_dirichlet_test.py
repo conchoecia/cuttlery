@@ -617,8 +617,8 @@ def _calculate_combination_space(noncoding_dict, coding_dict,
 
     For the total number of possible combinations for the LOO analyses:
       - For loci that are independent (nuclear genomes), the number of possible
-         combinations is: <num of individuals ^ num coding loci> *\
-                          <(num of individuals * 3) ^ (num noncoding loci)>
+         combinations is: ( <num of individuals ^ num coding loci> *\
+                          <(num of individuals * 3) ^ num noncoding loci>)
       - For loci that are not independent (mito genomes), the number of
          possible combos is: <num of individuals * (3 ^ num noncoding loci)>
         - The reasoning behind the combinatorics for independent loci is that
@@ -629,8 +629,11 @@ def _calculate_combination_space(noncoding_dict, coding_dict,
 
     For the total number of possible combinations for the unknown test analyses:
       - For independent loci:
-         <num of individuals ^ (num coding loci + num test loci)> * \
+         <num of individuals ^ (num coding loci + 1)> * \
            <(num of individuals * 3) ^ (num noncoding loci)>
+        - We simply add one to the first power since we are testing each
+           possible combination of genes <num individuals> more times for
+           a single test gene
       - For non-independent loci: <num of individuals * (3 ^ num noncoding loci)>
         - This is the same as the LOO analysis number of combinations since
            we have not added any possible way to make rearrangements when
@@ -649,9 +652,9 @@ def _calculate_combination_space(noncoding_dict, coding_dict,
     nncl = results_dict["num_nc_loci"]
     ntl  = results_dict["num_test_loci"]
 
-    results_dict["LOO_independent"]     = (ni ** ncl) * ( (ni * 3) ** nncl )
+    results_dict["LOO_independent"]     = ((ni ** ncl) * ( (ni * 3) ** nncl ))
     results_dict["LOO_nonindependent"]  = ni * ( 3 ** nncl)
-    results_dict["test_independent"]    = ( ni ** (ncl + ntl) ) * ( (ni * 3) ** nncl )
+    results_dict["test_independent"]    = ( ni ** (ncl + 1) ) * ( (ni * 3) ** nncl )
     results_dict["test_nonindependent"] = results_dict["LOO_nonindependent"]
 
     return results_dict
@@ -703,21 +706,21 @@ def dirichlet(args):
 
         print("""{} - Calculating the combination space.""".format(timestamp()), file = outfile)
         cspace = _calculate_combination_space(ncseqs_dict, codingseqs_dict, testseqs_dict)
-        print("""{} - There are {} individuals.""".format(
+        print("""{} - There are {:,} individuals.""".format(
             len(timestamp())*" ", cspace["num_individuals"]), file = outfile)
-        print("""{} - There are {} coding loci.""".format(
+        print("""{} - There are {:,} coding loci.""".format(
             len(timestamp())*" ", cspace["num_coding_loci"]), file = outfile)
-        print("""{} - There are {} noncoding loci.""".format(
+        print("""{} - There are {:,} noncoding loci.""".format(
             len(timestamp())*" ", cspace["num_nc_loci"]), file = outfile)
-        print("""{} - There are {} test loci.""".format(
+        print("""{} - There are {:,} test loci.""".format(
             len(timestamp())*" ", cspace["num_test_loci"]), file = outfile)
-        print("""{} - There are {} combinations for LOO independent analyses.""".format(
+        print("""{} - There are {:,} combinations for LOO independent analyses.""".format(
             len(timestamp())*" ", cspace["LOO_independent"]), file = outfile)
-        print("""{} - There are {} combinations for LOO nonindependent analyses.""".format(
+        print("""{} - There are {:,} combinations for LOO nonindependent analyses.""".format(
             len(timestamp())*" ", cspace["LOO_nonindependent"]), file = outfile)
-        print("""{} - There are {} combinations for test independent analyses.""".format(
+        print("""{} - There are {:,} combinations for test independent analyses.""".format(
             len(timestamp())*" ", cspace["test_independent"]), file = outfile)
-        print("""{} - There are {} combinations for test nonindependent analyses.""".format(
+        print("""{} - There are {:,} combinations for test nonindependent analyses.""".format(
             len(timestamp())*" ", cspace["test_nonindependent"]), file = outfile)
 
         # then get the list of lists of noncoding sequences.
@@ -729,18 +732,27 @@ def dirichlet(args):
                            'codingseqs_dict': codingseqs_dict,
                            'ncseqs_dict': ncseqs_dict,
                            'n_iterations': chunksize}
-        # perform the test analyses of the unknown seqs
-        num_simulations = int(options.numsims/chunksize) * len(testseqs_dict.keys())
+
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        #
+        #  This block performs the test analyses of the unknown seqs.
+        #
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         print("""{} - Performing test_seqs analyses.""".format(timestamp()), file = outfile)
+        num_simulations = int(options.numsims/chunksize) * len(testseqs_dict.keys())
         results = parallel_process([seqs_dicts_args for x in range(num_simulations)],
                                    unknown_seq_analysis_chunk, n_jobs = options.threads,
                                    use_kwargs = False, front_num=3)
         flat_results = [item for sublist in results for item in sublist]
         results_dict_list += flat_results
 
-        num_gene_simulations = int(options.numsims/chunksize) * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
-        ## now perform the LOO analyses of all the known coding and nc seqs
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        #
+        #  now perform the LOO analyses of all the known coding and nc seqs
+        #
+        # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         print("""{} - Performing leave-one-out analyses.""".format(timestamp()), file = outfile)
+        num_gene_simulations = int(options.numsims/chunksize) * (len(codingseqs_dict.keys()) + len(ncseqs_dict.keys()))
         results = parallel_process([seqs_dicts_args for x in range(num_gene_simulations)],
                                    LOO_analysis_chunk, n_jobs = options.threads,
                                    use_kwargs = False, front_num=3)
@@ -832,7 +844,7 @@ def plot_results(results, **kwargs):
 
     # autumn colors for noncoding
     cmap = cm.get_cmap('autumn')
-    autumn = {noncoding_seqnames[i]: cmap(1 - (i/len(noncoding_seqnames)))
+    autumn = {noncoding_seqnames[i]: cmap(1 - ((i+1)/(len(noncoding_seqnames) + 1)))
             for i in range(len(noncoding_seqnames)) }
     # winter colors for coding
     cmap = cm.get_cmap('winter')
@@ -928,6 +940,7 @@ def plot_results_simple(results, **kwargs):
     coding_seqnames = sorted(codings['seqname'].unique())
     tests_seqnames = sorted(tests['seqname'].unique())
     if kwargs.get("sort_type") in ["meaninc", "meandec", "medinc", "meddec"]:
+        # This block sorts the sequences based on the arguments to cuttlery dirichlet
         decreasing = False
         if kwargs.get("sort_type") in ["meandec","meddec"]:
             decreasing = True
@@ -935,8 +948,6 @@ def plot_results_simple(results, **kwargs):
             sorton = "mean"
         elif kwargs.get("sort_type") in ["medinc","meddec"]:
             sorton = "median"
-
-
         noncoding_seqnames = _sorted_by_mean_ll(noncoding_seqnames,
                                                 noncodings, sorton,
                                                 decreasing = decreasing)
@@ -947,9 +958,10 @@ def plot_results_simple(results, **kwargs):
                                             tests, sorton,
                                             decreasing = decreasing)
 
-        #write a function to sort by mean
     all_seqnames = noncoding_seqnames + tests_seqnames + coding_seqnames
 
+    # make a list of every gene's ll_ratios given the sort order we have just
+    #  selected
     data_lists = [list(results.loc[results['seqname'] == seqname, 'll_ratio']) for
                   seqname in all_seqnames]
 
@@ -958,23 +970,42 @@ def plot_results_simple(results, **kwargs):
         print(coding_seqnames)
         print(tests_seqnames)
 
-    # autumn colors for noncoding
-    cmap = cm.get_cmap('autumn')
-    autumn = {noncoding_seqnames[i]: cmap(1 - (i/len(noncoding_seqnames)))
-            for i in range(len(noncoding_seqnames)) }
-    # winter colors for coding
-    cmap = cm.get_cmap('winter')
-    winter = {coding_seqnames[i]: cmap(1 - (i/len(coding_seqnames)))
-            for i in range(len(coding_seqnames)) }
-    # magma colors for tests
-    cmap = cm.get_cmap('magma')
-    magma = {tests_seqnames[i]: cmap(((i/len(coding_seqnames))) ) for i in range(len(tests_seqnames)) }
 
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    #
+    # This block handles selecting the colors of all of the violinplots
+    #
+    # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    # color the noncodings warm by default or according to argparse
+    if kwargs.get("color_nc"):
+        nc_colordict = {x: kwargs.get("color_nc") for x in noncoding_seqnames }
+    else:
+        cmap = cm.get_cmap('autumn')
+        nc_colordict = {noncoding_seqnames[i]: cmap(1 - ((i + 1)/(len(noncoding_seqnames) +1) ))
+                  for i in range(len(noncoding_seqnames)) }
+    # color the codings cool by default or according to argparse
+    if kwargs.get("color_coding"):
+        coding_colordict = {x: kwargs.get("color_coding") for x in coding_seqnames }
+    else:
+        cmap = cm.get_cmap('winter')
+        coding_colordict = {coding_seqnames[i]: cmap(1 - (i/len(coding_seqnames)))
+                  for i in range(len(coding_seqnames)) }
+    # magma colors for tests
+    # color the test sequences dark by default or according to argparse
+    if kwargs.get("color_test"):
+        test_colordict = {x: kwargs.get("color_test") for x in tests_seqnames }
+    else:
+        cmap = cm.get_cmap('magma')
+        test_colordict = {tests_seqnames[i]: cmap(((i/len(coding_seqnames))) )
+                          for i in range(len(tests_seqnames)) }
     ## We need to plot each of the sections individually to accommodate the gaps
     ## Put all the colors into a list with the same indices as all_seqnames
-    noncoding_colors = [autumn[noncoding_seqname] for noncoding_seqname in noncoding_seqnames]
-    coding_colors = [winter[coding_seqname] for coding_seqname in coding_seqnames]
-    tests_colors = [magma[tests_seqname] for tests_seqname in tests_seqnames]
+    noncoding_colors = [nc_colordict[noncoding_seqname]
+                        for noncoding_seqname in noncoding_seqnames]
+    coding_colors    = [coding_colordict[coding_seqname]
+                        for coding_seqname in coding_seqnames]
+    tests_colors     = [test_colordict[tests_seqname]
+                        for tests_seqname in tests_seqnames]
     all_colors = noncoding_colors + tests_colors + coding_colors
     if kwargs.get("debug"):
         print(all_colors)

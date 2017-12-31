@@ -32,6 +32,31 @@ import argparse
 # cuttlery imports
 import cuttlery.version
 
+class InterpretColors(argparse.Action):
+    """Interpret what type of color argument the user passed and modify to be
+    usable by matplotlib
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
+    def __call__(self, parser, namespace, values, option_string=None):
+        # if it is a string that starts with #, it is hex, pass as string
+        if values[0] == "#":
+            setattr(namespace, self.dest, values)
+        # if it is a tuple or list, convert to a tuple
+        elif values[0] in ["(", "["]:
+            from ast import literal_eval as make_tuple
+            color_tuple = make_tuple(values)
+            setattr(namespace, self.dest, color_tuple)
+        elif values.isalpha():
+            setattr(namespace, self.dest, values)
+        else:
+            raise Exception("""Color methods only accept color names as hex strings
+            '#f4dc41', float RGBA tuple-types represented as strings
+            '(0.957, 0.863, 0.016, 1.0)', or as color names as strings that are
+            interpretable by matplotlib, ie 'red'.""")
+
+
 #This class is used in argparse to expand the ~. This avoids errors caused on
 # some systems.
 class FullPaths(argparse.Action):
@@ -178,6 +203,42 @@ def main():
     parser_dirichlet.add_argument("--coding_dir",
                         action = FullPaths,
                         help = """The directory with known coding sequences.""")
+    parser_dirichlet.add_argument("--color_nc",
+                        default = None,
+                        action = InterpretColors,
+                        type=str,
+                        help = """Select a color for all of the noncoding seqs
+                        in the violinplot. Can accept a hex string like:
+                        --color_nc '#f4dc41'
+                        or a tuple/list type surrounded with quotation marks
+                        '(R, G, B, A)' values scaled
+                        between 0.0-1.0 like:
+                        --color_nc '(0.957, 0.863, 0.016, 1.0)', or a color
+                        name that is interpretable by matplotlib, like 'red'. """)
+    parser_dirichlet.add_argument("--color_coding",
+                        default = None,
+                        action = InterpretColors,
+                        type=str,
+                        help = """Select a color for all of the coding seqs
+                        in the violinplot. Can accept a hex string like:
+                        --color_nc '#f4dc41'
+                        or a tuple/list type surrounded with quotation marks
+                        '(R, G, B, A)' values scaled
+                        between 0.0-1.0 like:
+                        --color_nc '(0.957, 0.863, 0.016, 1.0)', or a color
+                        name that is interpretable by matplotlib, like 'red'. """)
+    parser_dirichlet.add_argument("--color_test",
+                        default = None,
+                        action = InterpretColors,
+                        type=str,
+                        help = """Select a color for all of the test seqs
+                        in the violinplot. Can accept a hex string like:
+                        --color_nc '#f4dc41'
+                        or a tuple/list type surrounded with quotation marks
+                        '(R, G, B, A)' values scaled
+                        between 0.0-1.0 like:
+                        --color_nc '(0.957, 0.863, 0.016, 1.0)', or a color
+                        name that is interpretable by matplotlib, like 'red'.""")
     parser_dirichlet.add_argument('--dpi',
                         metavar='dpi',
                         default=600,

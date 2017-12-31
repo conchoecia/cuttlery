@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
-pathlist = ['/Users/d/git/my_repo/sequences/test_seqs']
+import pandas as pd
+import numpy as np
 
-for single_dir in pathlist:
-    print("single_dir is", single_dir)
+s = pd.Series(np.random.randn(5))
+print(getattr(s, "mean")())
+print(s.mean())
