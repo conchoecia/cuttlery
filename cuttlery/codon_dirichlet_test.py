@@ -31,9 +31,13 @@ more closely matches the trinucleotides frequencies of coding or
 noncoding DNA from the same species.
 """
 
-#
-#@author: Jordan/DTS
 #info about confusion matrix here: http://www.dataschool.io/simple-guide-to-confusion-matrix-terminology/
+
+# - TODO
+#   - Streamline how sequences are stored. Use a dictionary or something
+#   - Add the ability to perform tests independently.
+#     - Instead of randomly selecting sequences add the ability to permute
+#       through all possible combinations.
 
 
 import argparse
