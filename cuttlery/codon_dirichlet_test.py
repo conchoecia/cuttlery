@@ -41,6 +41,7 @@ import collections
 import math
 import itertools
 import sys
+import random
 from Bio import SeqIO
 from builtins import range
 import progressbar
@@ -153,6 +154,10 @@ def parallel_process(array, function, n_jobs=2, use_kwargs=False, front_num=3):
     return front + out
 
 def interpret_hypothesis_test(log_likelihood_ratio):
+    """
+     Author:
+    - Jordan M Eizenga (github@jeizenga)
+    """
     if log_likelihood_ratio < 0:
         favored = 2
         unfavored = 1
@@ -190,7 +195,13 @@ def interpret_hypothesis_test(log_likelihood_ratio):
 
     return favored
 
-def dirichlet_log_marginal_likelihood(counts_test, counts_background, pseudocounts):
+def dirichlet_log_marginal_likelihood(counts_test, counts_background,
+                                      pseudocounts):
+    """
+    Author:
+    - Jordan M Eizenga (github@jeizenga)
+    """
+
     #print(counts_test)
     #print(counts_background)
     codons = ["".join(codon) for codon in itertools.product(nts, repeat = 3)]
@@ -206,7 +217,11 @@ def dirichlet_log_marginal_likelihood(counts_test, counts_background, pseudocoun
 
 def gen_codons(seq):
     """this generates codons as a list of strings. Each element of the list is
-    a string of length 3"""
+    a string of length 3
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
     return [seq[i:i+3] for i in np.arange(0, len(seq), 3)]
 
 def codon_dirichlet_log_likelihood_ratio(test_seq, seq_list_1, seq_list_2,
@@ -421,6 +436,10 @@ def estimate_power_and_false_pos(log_likelihood_score, positive_simulations,
 def estimate_power_and_false_pos_from_distr(log_likelihood_scores,
                                             positive_simulations,
                                             negative_simulations):
+    """
+    Author:
+    - Jordan M Eizenga (github@jeizenga)
+    """
     np.sort(log_likelihood_scores)
     np.sort(positive_simulations)
     np.sort(negative_simulations)
@@ -454,6 +473,10 @@ def estimate_power_and_false_pos_from_distr(log_likelihood_scores,
     return false_pos, power
 
 def plot_ratios(results_df):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
     coding_llratios = np.array([llratio_list[i]
                            for i in range(len(true_value_list))
                            if true_value_list[i] == 1])
@@ -489,7 +512,11 @@ def plot_ratios(results_df):
     plt.savefig("dirichlet_results_{}.png".format(timestamp()), dpi=600, transparent=False)
 
 def LOO_analysis_chunk(args):
-    """randomly performs one leave-one-out analysis"""
+    """randomly performs one leave-one-out analysis
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
     codingseqs_dict = args['codingseqs_dict']
     ncseqs_dict = args['ncseqs_dict']
     n_iterations = args['n_iterations']
@@ -534,6 +561,11 @@ def LOO_analysis_chunk(args):
 
 
 def unknown_seq_analysis_chunk(args):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
+
     testseqs_dict = args['testseqs_dict']
     codingseqs_dict = args['codingseqs_dict']
     ncseqs_dict = args['ncseqs_dict']
@@ -576,7 +608,59 @@ def unknown_seq_analysis_chunk(args):
         results.append(result)
     return results
 
+def _calculate_combination_space(noncoding_dict, coding_dict,
+                                 test_dict):
+    """Calculates how many possible combinations of genes there are given
+    the data.
+
+    Edit: The combinatorics of the below equations is not correct. Fix those.
+
+    For the total number of possible combinations for the LOO analyses:
+      - For loci that are independent (nuclear genomes), the number of possible
+         combinations is: <num of individuals ^ num coding loci> *\
+                          <(num of individuals * 3) ^ (num noncoding loci)>
+      - For loci that are not independent (mito genomes), the number of
+         possible combos is: <num of individuals * (3 ^ num noncoding loci)>
+        - The reasoning behind the combinatorics for independent loci is that
+           there are no ways to arrange the coding loci between individuals
+           since they are not independent. For the noncoding loci we are able
+           to make rearrangements between the pseudocodons in each individual,
+           but not to make pseudocodon rearrangements between individuals.
+
+    For the total number of possible combinations for the unknown test analyses:
+      - For independent loci:
+         <num of individuals ^ (num coding loci + num test loci)> * \
+           <(num of individuals * 3) ^ (num noncoding loci)>
+      - For non-independent loci: <num of individuals * (3 ^ num noncoding loci)>
+        - This is the same as the LOO analysis number of combinations since
+           we have not added any possible way to make rearrangements when
+           adding test loci
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
+    results_dict = {}
+    results_dict["num_individuals"]     = len(test_dict[random.choice(list(test_dict.keys()))])
+    results_dict["num_coding_loci"]     = len(coding_dict)
+    results_dict["num_nc_loci"]         = len(noncoding_dict)
+    results_dict["num_test_loci"]       = len(test_dict)
+
+    ni   = results_dict["num_individuals"]
+    ncl  = results_dict["num_coding_loci"]
+    nncl = results_dict["num_nc_loci"]
+    ntl  = results_dict["num_test_loci"]
+
+    results_dict["LOO_independent"]     = (ni ** ncl) * ( (ni * 3) ** nncl )
+    results_dict["LOO_nonindependent"]  = ni * ( 3 ** nncl)
+    results_dict["test_independent"]    = ( ni ** (ncl + ntl) ) * ( (ni * 3) ** nncl )
+    results_dict["test_nonindependent"] = results_dict["LOO_nonindependent"]
+
+    return results_dict
+
 def dirichlet(args):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
     outfile = sys.stderr
     print("{} - cuttlery dirichlet.".format(timestamp()), file = outfile)
     print("{} - reading options.".format(timestamp()), file = outfile)
@@ -613,10 +697,29 @@ def dirichlet(args):
         testseqs_dict = gen_codingseqs_dict(options.test_dir)
         #Then get a list of the known sequences
         print("""{} - Processing known coding sequences.""".format(timestamp()), file = outfile)
-
         codingseqs_dict = gen_codingseqs_dict(options.coding_dir)
         print("""{} - Processing noncoding sequences and generating pseudocodons.""".format(timestamp()), file = outfile)
         ncseqs_dict = gen_noncodingseq_dict(options.noncoding_dir)
+
+        print("""{} - Calculating the combination space.""".format(timestamp()), file = outfile)
+        cspace = _calculate_combination_space(ncseqs_dict, codingseqs_dict, testseqs_dict)
+        print("""{} - There are {} individuals.""".format(
+            len(timestamp())*" ", cspace["num_individuals"]), file = outfile)
+        print("""{} - There are {} coding loci.""".format(
+            len(timestamp())*" ", cspace["num_coding_loci"]), file = outfile)
+        print("""{} - There are {} noncoding loci.""".format(
+            len(timestamp())*" ", cspace["num_nc_loci"]), file = outfile)
+        print("""{} - There are {} test loci.""".format(
+            len(timestamp())*" ", cspace["num_test_loci"]), file = outfile)
+        print("""{} - There are {} combinations for LOO independent analyses.""".format(
+            len(timestamp())*" ", cspace["LOO_independent"]), file = outfile)
+        print("""{} - There are {} combinations for LOO nonindependent analyses.""".format(
+            len(timestamp())*" ", cspace["LOO_nonindependent"]), file = outfile)
+        print("""{} - There are {} combinations for test independent analyses.""".format(
+            len(timestamp())*" ", cspace["test_independent"]), file = outfile)
+        print("""{} - There are {} combinations for test nonindependent analyses.""".format(
+            len(timestamp())*" ", cspace["test_nonindependent"]), file = outfile)
+
         # then get the list of lists of noncoding sequences.
         # We first have to pass the argument of how many copies of each gene there
         #  are so that the program adds the sequences in groups, this determines how many
@@ -646,7 +749,6 @@ def dirichlet(args):
         results_dict_list += flat_results
         print("""{} - Converting results to dataframe.""".format(timestamp()), file = outfile)
         results_df = pd.DataFrame.from_dict(results_dict_list)
-        print(results_df)
         print("""{} - Saving results to {}.""".format(
             timestamp(), results_file), file = outfile)
         results_df.to_csv(results_file, index=False)
@@ -663,17 +765,17 @@ def dirichlet(args):
     plot_results(results_df, **vars(options))
 
     # now output statistics about the data
+    print("""{} - Calculating the confusion matrix.""".format(timestamp()), file = outfile)
     real_val = results_df.loc[results_df['analysis_type'] == 'LOO', 'real_val']
     observed_val = results_df.loc[results_df['analysis_type'] == 'LOO', 'observed']
     matrix = cmcalc(real_val, observed_val)
-    print("confusion matrix")
-    print (matrix)
+    print(matrix)
 
     # now calculate the false positive rate and the power of the simulation for
     #  each test data type
+    print("""{} - Calculating false positive and power rate.""".format(timestamp()), file = outfile)
     tests = results_df[results_df['analysis_type'] == 'test']
     tests_seqnames = sorted(tests['seqname'].unique())
-
     for seqname in tests_seqnames:
         test_ll = tests.loc[tests['seqname'] == seqname, 'll_ratio'].as_matrix()
         noncodings = results_df.loc[results_df['real_val'] == 'noncoding', 'll_ratio'].as_matrix()
@@ -685,6 +787,10 @@ def dirichlet(args):
         print("{} power: {}".format(seqname, power))
 
 def plot_results(results, **kwargs):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
     if kwargs.get("debug"):
         print(results.head())
     plt.style.use('BME163')
@@ -783,6 +889,10 @@ def plot_results(results, **kwargs):
         transparent=kwargs["transparent"])
 
 def plot_results_simple(results, **kwargs):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
     plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
@@ -878,15 +988,15 @@ def plot_results_simple(results, **kwargs):
         positions = positions + list(np.arange(counter, counter+len(this_list), 1))
         counter += len(this_list)
 
-    nc=panel0.violinplot(data_lists, \
-                  positions=positions, \
-                  widths=0.5, vert = False,
+    nc=panel0.violinplot(data_lists,
+                  positions=positions,
+                  widths=0.8, vert = False,
                   showmeans=False,showmedians=False,showextrema=False,
                   bw_method=0.05)
     for i in range(len(nc['bodies'])):
         nc['bodies'][i].set_facecolor(all_colors[i])
         nc['bodies'][i].set_alpha(0.75)
-        nc['bodies'][i].set_edgecolor('black')
+        nc['bodies'][i].set_linewidth(0)
 
     #panel0.set_ylim([len(data_lists), -1 ])
     plt.gca().invert_yaxis()
@@ -998,21 +1108,27 @@ def _sorted_by_mean_ll(genenames, df, sorton, **kwargs):
     2          test  31.772205   coding      NaN     UNK
     3          test  21.590106   coding      NaN    ND2L
     4          test  33.697691   coding      NaN     UNK
+
+    Author:
+    - Darrin T Schultz (github@conchoecia)
     """
     try:
         kwargs["decreasing"]
     except:
-        raise Exception("You need to specify if the sort is increasing or decreasing")
-    print(sorton)
-    gene_mean_dict = {x:getattr(df.loc[df['seqname'] == x, 'll_ratio'],sorton)
+        raise Exception("""You need to specify if the sort is
+                        increasing or decreasing""")
+    gene_mean_dict = {x:getattr(df.loc[df['seqname'] == x, 'll_ratio'],sorton)()
                      for x in genenames}
-    print(gene_mean_dict)
     sorted_values = sorted(gene_mean_dict, key = gene_mean_dict.get,
                            reverse = kwargs.get("decreasing"))
-    print("sorted values", sorted_values)
     return sorted_values
 
 def plot_left_facing_bracket(panel, xmaxes, ymaxes, ymins, ax_width, text):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
+
     nct_xmax = max(xmaxes)
     nct_ymax = max(ymaxes)
     nct_ymin = min(ymins)
@@ -1050,6 +1166,11 @@ def plot_left_facing_bracket(panel, xmaxes, ymaxes, ymins, ax_width, text):
                     color='black', fontsize=10)
 
 def plot_right_facing_bracket(panel, xmins, ymaxes, ymins, ax_width, text):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
+
     nct_xmin = min(xmins)
     nct_ymax = max(ymaxes)
     nct_ymin = min(ymins)
