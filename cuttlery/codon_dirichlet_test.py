@@ -674,6 +674,7 @@ def dirichlet(args):
     #First, read in the options
     global options
     options = args
+    print(options)
     ## FOR INTERNAL CONSISTENCY, ANY SET_1 IS CODING and SET_2 is NONCODING!
     results_file = options.results_file
     if results_file == None:
@@ -902,6 +903,7 @@ def plot_results(results, **kwargs):
         base_output_name= kwargs["output_basename"] + "_histogram",
         image_formats=kwargs["fileform"],
         dpi=kwargs["dpi"],
+        no_time_stamp = kwargs["no_time_stamp"],
         transparent=kwargs["transparent"])
 
 def plot_results_simple(results, **kwargs):
@@ -1128,6 +1130,7 @@ def plot_results_simple(results, **kwargs):
         base_output_name= kwargs["output_basename"] + "_violins",
         image_formats=kwargs["fileform"],
         dpi=kwargs["dpi"],
+        no_time_stamp = kwargs["no_time_stamp"],
         transparent=kwargs["transparent"])
 
 def _sorted_by_mean_ll(genenames, df, sorton, **kwargs):

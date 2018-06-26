@@ -261,11 +261,12 @@ def fasta_path_to_seqs(fasta_path, codon_table=False, codon_alphabet=False):
         seqs.append(record)
     return seqs
 
-def print_images(base_output_name, image_formats, dpi, path = None, transparent=False):
-    file_base = os.path.splitext(os.path.basename(base_output_name))[0]
+def print_images(base_output_name, image_formats, dpi, transparent=False,
+                 no_time_stamp = False):
+    file_base = base_output_name
     for fmt in image_formats:
-        if path:
-            out_name = path
+        if no_time_stamp:
+            out_name = "{0}.{1}".format(file_base, fmt)
         else:
             out_name = "{0}_{1}.{2}".format(file_base, timestamp(), fmt)
         try:
