@@ -259,6 +259,10 @@ def main():
                         action = FullPaths,
                         help = """The directory with noncoding sequences to
                         test.""")
+    parser_dirichlet.add_argument("--no_timestamp",
+                                  action = 'store_true',
+                                  help="""Turn off time stamps in the filename
+                                  output.""")
     parser_dirichlet.add_argument("--numsims",
                         default = 10,
                         type = int,
@@ -287,10 +291,6 @@ def main():
                         action = FullPaths,
                         help = """The directory with unknown sequences to
                         test.""")
-    parser_dirichlet.add_argument("--no_time_stamp",
-                                  action = 'store_true',
-                                  help="""Turn off time stamps in the filename
-                                  output.""")
     parser_dirichlet.add_argument("-@", "--threads",
                         type = int,
                         default = 2,

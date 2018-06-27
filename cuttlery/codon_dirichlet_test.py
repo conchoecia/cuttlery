@@ -903,7 +903,7 @@ def plot_results(results, **kwargs):
         base_output_name= kwargs["output_basename"] + "_histogram",
         image_formats=kwargs["fileform"],
         dpi=kwargs["dpi"],
-        no_time_stamp = kwargs["no_time_stamp"],
+        no_timestamp = kwargs["no_timestamp"],
         transparent=kwargs["transparent"])
 
 def plot_results_simple(results, **kwargs):
@@ -1130,7 +1130,7 @@ def plot_results_simple(results, **kwargs):
         base_output_name= kwargs["output_basename"] + "_violins",
         image_formats=kwargs["fileform"],
         dpi=kwargs["dpi"],
-        no_time_stamp = kwargs["no_time_stamp"],
+        no_timestamp = kwargs["no_timestamp"],
         transparent=kwargs["transparent"])
 
 def _sorted_by_mean_ll(genenames, df, sorton, **kwargs):

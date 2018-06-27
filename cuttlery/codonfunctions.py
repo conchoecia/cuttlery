@@ -262,10 +262,10 @@ def fasta_path_to_seqs(fasta_path, codon_table=False, codon_alphabet=False):
     return seqs
 
 def print_images(base_output_name, image_formats, dpi, transparent=False,
-                 no_time_stamp = False):
+                 no_timestamp = False):
     file_base = base_output_name
     for fmt in image_formats:
-        if no_time_stamp:
+        if no_timestamp:
             out_name = "{0}.{1}".format(file_base, fmt)
         else:
             out_name = "{0}_{1}.{2}".format(file_base, timestamp(), fmt)
