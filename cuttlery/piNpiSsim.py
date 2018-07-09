@@ -34,6 +34,18 @@ of similar base composition and geneology as the observed population
 of protein-coding sequences.
 """
 
+#plotting stuff
+# start with matplotlib since other libraries may load it
+import matplotlib
+#had to do this do get it to work on mac https://stackoverflow.com/questions/30138026
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+from matplotlib import cm
+import matplotlib.patches as mplpatches
+from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.path import Path
+
 
 #mathy stuff
 import numpy as np
@@ -51,16 +63,6 @@ from itertools import permutations
 from cuttlery.codonfunctions import fasta_dir_to_gene_filelist, fasta_path_to_codonseqs,\
     seqs_to_df, calculate_pi, seqfreqs, calculate_piN_piS
 
-#plotting stuff
-import matplotlib
-#had to do this do get it to work on mac https://stackoverflow.com/questions/30138026
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import matplotlib.mlab as mlab
-from matplotlib import cm
-import matplotlib.patches as mplpatches
-from matplotlib.colors import LinearSegmentedColormap
-from matplotlib.path import Path
 import urllib.request
 import scipy.stats
 import sys, os
@@ -541,7 +543,7 @@ def plot_results(results):
     markers = {"observed": 'o', "simulation": "*"}
     sizes = {"observed": 3, "simulation": 1}
 
-    plt.style.use('BME163')
+    #plt.style.use('BME163')
 
     #set the figure dimensions
     figWidth = 5
@@ -598,7 +600,7 @@ def plot_results(results):
     plt.savefig("piNpiS_picheck_{}.png".format(timestamp()), dpi=600, transparent=False)
 
 def piNpiS_boxplot(results):
-    plt.style.use('BME163')
+    #plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
     figHeight = 6
