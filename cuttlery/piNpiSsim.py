@@ -61,7 +61,7 @@ from itertools import permutations
 
 # cuttlery stuff
 from cuttlery.codonfunctions import fasta_dir_to_gene_filelist, fasta_path_to_codonseqs,\
-    seqs_to_df, calculate_pi, seqfreqs, calculate_piN_piS
+    print_images, seqs_to_df, calculate_pi, seqfreqs, calculate_piN_piS
 
 import urllib.request
 import scipy.stats
@@ -456,11 +456,11 @@ def pinpissim(args):
     #print(" - Printing results", file = sys.stderr)
     #print_results(results_df)
     print(" - Plotting results", file = sys.stderr)
-    plot_results(results_df)
+    plot_results(results_df, **vars(args))
     print(" - Boxplot of results", file = sys.stderr)
-    piNpiS_boxplot(results_df)
+    piNpiS_boxplot(results_df, **vars(args))
 
-def print_results(results):
+def print_results(results, **kwargs):
     """This dataframe prints out the results of the data depending on the type.
     Observed data:
       - pi, piN, piS, piN/piS, seqname
@@ -504,12 +504,22 @@ def print_results(results):
     cols.insert(0, cols.pop(cols.index('seqname')))
     sim_results = sim_results.loc[:, cols]
     sim_results.reset_index(inplace=True, drop = True)
-    sim_results.to_csv("simulation_sumstats_{}.csv".format(timestamp()), index = False)
+
+    if kwargs["output_basename"] is None:
+        filename = "simulation_sumstats"
+    else:
+        filename = kwargs["output_basename"] + "_simulation_sumstats"
+    if kwargs["no_timestamp"]:
+        filename = "{}.csv".format(filename)
+    else:
+        filename = "{}_{}.csv".format(filename, timestamp())
+
+    sim_results.to_csv(filename, index = False)
     print("Simulated results:")
     print(sim_results)
     print("")
 
-def plot_results(results):
+def plot_results(results, **kwargs):
 
     sims = results[results['type'] == 'simulation']
     obs = results[results['type'] == 'observed']
@@ -528,7 +538,17 @@ def plot_results(results):
         p_val = num_ltet/num_observations
         p_values.append({'seqname': this_seqname, 'p_val': p_val})
     pval_df = pd.DataFrame.from_dict(p_values)
-    pval_df.to_csv("pval_sumstats_{}.csv".format(timestamp()), index = False)
+
+    if kwargs["output_basename"] is None:
+        filename = "pval_sumstats"
+    else:
+        filename = kwargs["output_basename"] + "_sumstats"
+    if kwargs["no_timestamp"]:
+        filename = "{}.csv".format(filename)
+    else:
+        filename = "{}_{}.csv".format(filename, timestamp())
+
+    pval_df.to_csv(filename, index = False)
     print("False positive rate of gene compared to simulated data:")
     print(pval_df)
     print("")
@@ -597,9 +617,21 @@ def plot_results(results):
     panel0.set_xlabel("pi")
     panel0.set_title("Simulated mutations pi and piN/piS")
 
-    plt.savefig("piNpiS_picheck_{}.png".format(timestamp()), dpi=600, transparent=False)
+    # Print image(s)
+    if kwargs["output_basename"] is None:
+        file_base = "piNpiS_picheck"
+    else:
+        file_base = kwargs["output_basename"] + "_picheck"
+    print_images(
+        base_output_name=file_base,
+        image_formats=kwargs["fileform"],
+        no_timestamp = kwargs["no_timestamp"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
 
-def piNpiS_boxplot(results):
+
+def piNpiS_boxplot(results, **kwargs):
+    print("kwargs is: \n", kwargs)
     #plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
@@ -725,7 +757,17 @@ def piNpiS_boxplot(results):
                     mfc=point[2], mew=0,linewidth=0,
                     alpha=0.25)
 
-    plt.savefig("piNpiS_boxplot_{}.png".format(timestamp()), dpi=600, transparent=False)
+    # Print image(s)
+    if kwargs["output_basename"] is None:
+        file_base = "piNpiS_boxplot"
+    else:
+        file_base = kwargs["output_basename"] + "_boxplot"
+    print_images(
+        base_output_name=file_base,
+        image_formats=kwargs["fileform"],
+        no_timestamp = kwargs["no_timestamp"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
 
 def timestamp():
     """

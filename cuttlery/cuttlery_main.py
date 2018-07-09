@@ -373,32 +373,33 @@ def main():
                                         help="""Simulate neutral evolution of
                                         aligned sequences given observed
                                         nucleotide diversity.""")
-    parser_piNpiS.add_argument("--outprefix",
-                        type=str,
-                        default=sys.stdout,
-                        help="""the output will be saved here""")
-    parser_piNpiS.add_argument("--tt_code",
-                        type = int,
-                        default = 4,
-                        help="""Select which gene code to use. Default is
-                        Standard""")
-    parser_piNpiS.add_argument("--tt_options",
-                        action = 'store_true',
-                        default = False,
-                        help="""Display the optional gene code names that you
-                        may pass to the <--tt_code> argument in a subsequent
-                        run""")
     parser_piNpiS.add_argument("--debug",
                         type = str,
                         nargs = '+',
                         default = ['NA'],
                         help = """Use this to print out special things while
                         debugging""")
+    parser_piNpiS.add_argument('--dpi',
+                                metavar='dpi',
+                                default=600,
+                                type=int,
+                                help="""Change the dpi from the default 600
+                                if you need it higher""")
     parser_piNpiS.add_argument("--fasta_dir",
                         action = FullPaths,
                         help = """This is the directory where the fasta file
                         alignments are located. The filename will be used as the
                         figure label while plotting.""")
+    parser_piNpiS.add_argument('--fileform',
+                               dest='fileform',
+                               choices=['png','pdf', 'eps', 'jpeg', 'jpg',
+                                        'pdf', 'pgf', 'ps', 'raw', 'rgba',
+                                        'svg', 'svgz', 'tif', 'tiff'],
+                               default=['png'],
+                               nargs='+',
+                               help="""Which output format would you like?
+                               Default is png. Select multiple options by putting
+                               a space between them: --fileform png pdf jpg""")
     parser_piNpiS.add_argument("--results_file",
                         help = """The results will be written to this file as a
                         csv.""")
@@ -410,6 +411,32 @@ def main():
                         type = int,
                         help = """the results will be written to this file as a
                         csv.""")
+    parser_piNpiS.add_argument("--no_timestamp",
+                                  action = 'store_true',
+                                  help="""Turn off time stamps in the filename
+                                  output.""")
+    parser_piNpiS.add_argument('-o', '--output-basename',
+                        help="""Specify a base name for the output file('
+                        's). The input file base name is the '
+                        'dirichlet.' Do not include any trailing periods,
+                        characters, or file extensions in the basename.""")
+    parser_piNpiS.add_argument('-T', '--transparent',
+                               action='store_false',
+                               default = True,
+                               help="""Specifies if
+                               you want a transparent background. Default
+                               is on.""")
+    parser_piNpiS.add_argument("--tt_code",
+                        type = int,
+                        default = 4,
+                        help="""Select which gene code to use. Default is
+                        Standard""")
+    parser_piNpiS.add_argument("--tt_options",
+                        action = 'store_true',
+                        default = False,
+                        help="""Display the optional gene code names that you
+                        may pass to the <--tt_code> argument in a subsequent
+                        run""")
     parser_piNpiS.add_argument("-@","--threads",
                         type = int,
                         help = """The num threads to attempt to use.""")
