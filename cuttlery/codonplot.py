@@ -592,13 +592,12 @@ def codonplot(args):
         freqs = counts_to_freqs(testseq_df, codon_table, CTSAC)
         panel = add_points(panel, codon_coords, freqs)
 
-
-    # Print image(s)
-    if options.output_basename is None:
-        file_base = os.path.splitext(os.path.basename(options.output_basename))[0]
-    else:
-        file_base = options.output_basename
-    print_images(file_base, options.fileform, options.dpi, options.transparent)
+    print_images(
+        base_output_name=options.output_basename,
+        image_formats=options.fileform,
+        no_timestamp = options.no_timestamp,
+        dpi=options.dpi,
+        transparent=options.transparent)
 
 def run(args):
     codonplot(args)

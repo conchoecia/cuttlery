@@ -142,6 +142,12 @@ def main():
                         help = """The directory that contains the fasta files
                         (alignments or normal sequences) of known coding sequences
                         sequences""")
+    parser_codonplot.add_argument('--dpi',
+                                metavar='dpi',
+                                default=600,
+                                type=int,
+                                help="""Change the dpi from the default 600
+                                if you need it higher""")
     parser_codonplot.add_argument('--fileform',
                                dest='fileform',
                                choices=['png','pdf', 'eps', 'jpeg', 'jpg',
@@ -152,6 +158,19 @@ def main():
                                help="""Which output format would you like?
                                Default is png. Select multiple options by putting
                                a space between them: --fileform png pdf jpg""")
+    parser_codonplot.add_argument("--invert",
+                        default = False,
+                        action = 'store_true',
+                        help="""Inverts some of the colors to make the plot look
+                        better on dark backgrounds while preserving alpha.""")
+    parser_codonplot.add_argument("--no_timestamp",
+                                  action = 'store_true',
+                                  help="""Turn off time stamps in the filename
+                                  output.""")
+    parser_codonplot.add_argument("-o", "--output_basename",
+                        default = "codonplot",
+                        help = """The results will be written to this file as a
+                        csv.""")
     parser_codonplot.add_argument('-T', '--transparent',
                                action='store_false',
                                default = True,
@@ -174,24 +193,6 @@ def main():
                         help="""Display the optional gene code names that you
                         may pass to the <--tt_code> argument in a subsequent
                         run""")
-    parser_codonplot.add_argument("--output", type=str,
-                        default=sys.stdout,
-                        help="""the output will be saved here""")
-    parser_codonplot.add_argument("--output_basename",
-                        default = "codonplot",
-                        help = """The results will be written to this file as a
-                        csv.""")
-    parser_codonplot.add_argument("--invert",
-                        default = False,
-                        action = 'store_true',
-                        help="""Inverts some of the colors to make the plot look
-                        better on dark backgrounds while preserving alpha.""")
-    parser_codonplot.add_argument('--dpi',
-                                metavar='dpi',
-                                default=600,
-                                type=int,
-                                help="""Change the dpi from the default 600
-                                if you need it higher""")
     parser_codonplot.set_defaults(func=run_subtool)
 
     ############
