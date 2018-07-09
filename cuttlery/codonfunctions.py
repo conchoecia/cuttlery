@@ -91,7 +91,7 @@ def calculate_pi(seqs):
     #    print("pi: {}".format(running_sum_pi))
     return running_sum_pi
 
-def calculate_piN_piS(codonseqs, method, codon_table):
+def calculate_piN_piS(codonseqs, method, codon_table, het=False):
     """
     takes a list of CodonSeq() objects and calculates piN, piS, pi, and piNpiS
     for them
@@ -106,11 +106,19 @@ def calculate_piN_piS(codonseqs, method, codon_table):
     for i in range(len(codonseqs)):
         for j in range(i+1, len(codonseqs)):
             #print(codonseqs[i], codonseqs[j])
-            dN, dS = cal_dn_ds(codonseqs[i], codonseqs[j], codon_table=codon_table, method=method)
-            piN = piN + (x[i] * x[j] * dN)
-            piS = piS + (x[i] * x[j] * dS)
-            #if 'piNpiS' in options.debug:
-            #    print("{0} dN{1}{2}={3} dS{1}{2}={4}".format(method, i, j, dN, dS))
+            if not het:
+                dN, dS = cal_dn_ds(codonseqs[i], codonseqs[j], codon_table=codon_table, method=method)
+                piN = piN + (x[i] * x[j] * dN)
+                piS = piS + (x[i] * x[j] * dS)
+                #if 'piNpiS' in options.debug:
+                #    print("{0} dN{1}{2}={3} dS{1}{2}={4}".format(method, i, j, dN, dS))
+            else:
+                try:
+                    dN, dS = cal_dn_ds(codonseqs[i], codonseqs[j], codon_table=codon_table, method=method)
+                    piN = piN + (x[i] * x[j] * dN)
+                    piS = piS + (x[i] * x[j] * dS)
+                except:
+                    pass
 
     analysis['piN'] = piN
     analysis['piS'] = piS

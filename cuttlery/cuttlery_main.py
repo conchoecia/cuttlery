@@ -339,7 +339,11 @@ def main():
                         help = """This is the method to use in the simulation to
                         calculate the nonsynonymous and synonymous mutation
                         sites.""")
-    parser_hetero.add_argument('-o', '--output-basename',
+    parser_hetero.add_argument("--no_timestamp",
+                                  action = 'store_true',
+                                  help="""Turn off time stamps in the filename
+                                  output.""")
+    parser_hetero.add_argument('-o', '--output_basename',
                         default = "heterogeneity_output",
                         help='Specify a base name for the output file('
                         's). The input file base name is the '
@@ -392,12 +396,10 @@ def main():
                         debugging""")
     parser_piNpiS.add_argument("--fasta_dir",
                         action = FullPaths,
-                        required = True,
                         help = """This is the directory where the fasta file
                         alignments are located. The filename will be used as the
                         figure label while plotting.""")
     parser_piNpiS.add_argument("--results_file",
-                        required = True,
                         help = """The results will be written to this file as a
                         csv.""")
     parser_piNpiS.add_argument("--method",
@@ -405,12 +407,10 @@ def main():
                         choices = ['NG86', 'LWL85', 'YN00', 'ML'],
                         help = """the method to use in the simulation""")
     parser_piNpiS.add_argument("--numsims",
-                        required = True,
                         type = int,
                         help = """the results will be written to this file as a
                         csv.""")
     parser_piNpiS.add_argument("-@","--threads",
-                        required = False,
                         type = int,
                         help = """The num threads to attempt to use.""")
     parser_piNpiS.set_defaults(func=run_subtool)
@@ -436,12 +436,12 @@ def main():
                  'calculate-pi' : parser_calcpi.print_help}
 
     if len(sys.argv)==2:
-        if sys.argv[1] == "dirichlet":
-            import cuttlery.codon_dirichlet_test as temp_name
-        else:
-            exec("import cuttlery.{} as temp_name".format(
-                args.command.replace("-", "_")), globals())
-        print(temp_name.__doc__)
+        #if sys.argv[1] == "dirichlet":
+        #    import cuttlery.codon_dirichlet_test as temp_name
+        #else:
+        #    exec("import cuttlery.{} as temp_name".format(
+        #        args.command.replace("-", "_")), globals())
+        #print(temp_name.__doc__)
         commandDict[args.command]()
         sys.exit(1)
 

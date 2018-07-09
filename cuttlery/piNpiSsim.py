@@ -53,7 +53,8 @@ from cuttlery.codonfunctions import fasta_dir_to_gene_filelist, fasta_path_to_co
 
 #plotting stuff
 import matplotlib
-matplotlib.use('agg')
+#had to do this do get it to work on mac https://stackoverflow.com/questions/30138026
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.mlab as mlab
 from matplotlib import cm
@@ -448,11 +449,13 @@ def pinpissim(args):
         results_df = pd.DataFrame.from_dict(all_flat)
         results_df.to_csv(results_file, index = False)
     else:
-        print("\nFound {} so skipping analysis\n".format(results_file))
+        print("\nFound {} so skipping analysis\n".format(results_file), file = sys.stderr)
         results_df = pd.read_csv(results_file)
-
-    print_results(results_df)
+    #print(" - Printing results", file = sys.stderr)
+    #print_results(results_df)
+    print(" - Plotting results", file = sys.stderr)
     plot_results(results_df)
+    print(" - Boxplot of results", file = sys.stderr)
     piNpiS_boxplot(results_df)
 
 def print_results(results):

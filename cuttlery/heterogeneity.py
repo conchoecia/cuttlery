@@ -123,7 +123,8 @@ def heterogeneity(options):
             #  save that info along with the codon index of the gene
             for i in range(len(sliced_codonseqs)):
                 partial = sliced_codonseqs[i]
-                results = calculate_piN_piS(partial, options.method, codon_table)
+                results = calculate_piN_piS(partial, options.method,
+                                            codon_table, het = True)
                 if results['piN'] > 0:
                     print("piN > 0: {}".format(results['piN']))
                 results['pi'] = calculate_pi(partial)
@@ -148,7 +149,9 @@ def heterogeneity(options):
     plot_results(results_df,
                  transparent=options.transparent,
                  dpi=options.dpi,
-                 fileform = options.fileform)
+                 fileform = options.fileform,
+                 no_timestamp = options.no_timestamp,
+                 basename = options.output_basename)
 
 def plot_results(df, **kwargs):
     #plt.style.use('BME163')
@@ -229,8 +232,9 @@ def plot_results(df, **kwargs):
 
     # Print image(s)
     print_images(
-        base_output_name="ND_diversity",
+        base_output_name=kwargs["basename"],
         image_formats=kwargs["fileform"],
+        no_timestamp=kwargs["no_timestamp"],
         dpi=kwargs["dpi"],
         transparent=kwargs["transparent"])
 
