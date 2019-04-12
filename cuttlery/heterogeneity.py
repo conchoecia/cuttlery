@@ -42,6 +42,7 @@ from Bio.codonalign.codonseq import _get_pi
 
 # pandas
 import pandas as pd
+import numpy as np
 
 # cuttlery stuff
 from cuttlery.codonfunctions import fasta_dir_to_gene_filelist,\
@@ -146,7 +147,13 @@ def heterogeneity(options):
     else:
         print("\nFound {} so skipping analysis\n".format(results_file))
         results_df = pd.read_csv(results_file)
-    plot_results(results_df,
+
+    genename_to_codonlen={seqname:max(list(results_df.loc[results_df["seqname"] == seqname, "slice_stop"])) \
+                            for seqname in list(results_df["seqname"].unique())}
+    #print("lens of seqs is:")
+    #print(genename_to_codonlen)
+
+    final_df = plot_results(results_df,
                  transparent=options.transparent,
                  dpi=options.dpi,
                  fileform = options.fileform,
@@ -154,9 +161,91 @@ def heterogeneity(options):
                  basename = options.output_basename,
                  TM_dir = options.TM_dir)
 
+    #now we get some simple stats on how many sites we observed in each domain type
+    columnnames = ["I_N_count", "I_S_count", "O_N_count", "O_S_count",
+               "IO_N_count", "IO_S_count", "TM_N_count", "TM_S_count"]
+    empty_array = np.array([np.repeat(-1, len(final_df["seqname"].unique()))]*len(columnnames)).T
+    stats_df = pd.DataFrame(empty_array, index = list(final_df["seqname"].unique()), columns=columnnames)
+    #print("here is the empty stats array")
+    #print(stats_df)
+    for genenamekey in list(final_df["seqname"].unique()):
+        #inside#N
+        size = len(final_df.loc[(final_df["seqname"] == genenamekey) & \
+                          (final_df["piNorS"]  == "piN") & \
+                          (final_df["TMtype"]  == "inside")])
+        stats_df.loc[genenamekey, "I_N_count"] = size
+
+        #inside#S
+        size = len(final_df.loc[(final_df["seqname"] == genenamekey) & \
+                          (final_df["piNorS"]  == "piS") & \
+                          (final_df["TMtype"]  == "inside")])
+        stats_df.loc[genenamekey, "I_S_count"] = size
+
+        #outside#N
+        size = len(final_df.loc[(final_df["seqname"] == genenamekey) & \
+                          (final_df["piNorS"]  == "piN") & \
+                          (final_df["TMtype"]  == "outside")])
+        stats_df.loc[genenamekey, "O_N_count"] = size
+
+        #outside#S
+        size = len(final_df.loc[(final_df["seqname"] == genenamekey) & \
+                          (final_df["piNorS"]  == "piS") & \
+                          (final_df["TMtype"]  == "outside")])
+        stats_df.loc[genenamekey, "O_S_count"] = size
+
+        #TM#N
+        size = len(final_df.loc[(final_df["seqname"] == genenamekey) & \
+                          (final_df["piNorS"]  == "piN") & \
+                          (final_df["TMtype"]  == "TMhelix")])
+        stats_df.loc[genenamekey, "TM_N_count"] = size
+
+        #TM#S
+        size = len(final_df.loc[(final_df["seqname"] == genenamekey) & \
+                          (final_df["piNorS"]  == "piS") & \
+                          (final_df["TMtype"]  == "TMhelix")])
+        stats_df.loc[genenamekey, "TM_S_count"] = size
+
+        #IO#N
+        size = int(stats_df.loc[genenamekey, "I_N_count"]) + int(stats_df.loc[genenamekey, "O_N_count"])
+        stats_df.loc[genenamekey, "IO_N_count"] = size
+
+        #IO#S
+        size = int(stats_df.loc[genenamekey, "I_S_count"]) + int(stats_df.loc[genenamekey, "O_S_count"])
+        stats_df.loc[genenamekey, "IO_S_count"] = size
+
+    TM_NS_count = stats_df["TM_N_count"] + stats_df["TM_S_count"]
+    IO_NS_count = stats_df["IO_N_count"] + stats_df["IO_S_count"]
+    all_NS_count = TM_NS_count + IO_NS_count
+    I_NS_count =  stats_df["I_N_count"]  + stats_df["I_S_count"]
+    O_NS_count =  stats_df["O_N_count"]  + stats_df["O_S_count"]
+
+    stats_df["TM_N_per_of_TM_NS"]   = stats_df["TM_N_count"]/TM_NS_count
+    stats_df["TM_S_per_of_TM_NS"]   = stats_df["TM_S_count"]/TM_NS_count
+    stats_df["IO_N_per_of_IO_NS"]   = stats_df["IO_N_count"]/IO_NS_count
+    stats_df["IO_S_per_of_IO_NS"]   = stats_df["IO_S_count"]/IO_NS_count
+    stats_df[ "I_N_per_of_I_NS"]    =  stats_df["I_N_count"]/I_NS_count
+    stats_df[ "I_S_per_of_I_NS"]    =  stats_df["I_S_count"]/I_NS_count
+    stats_df[ "O_N_per_of_I_NS"]    =  stats_df["O_N_count"]/O_NS_count
+    stats_df[ "O_S_per_of_I_NS"]    =  stats_df["O_S_count"]/O_NS_count
+    stats_df["TM_N_per_of_all_NS"]  = stats_df["TM_N_count"]/all_NS_count
+    stats_df["TM_S_per_of_all_NS"]  = stats_df["TM_S_count"]/all_NS_count
+    stats_df["IO_N_per_of_all_NS"]  = stats_df["IO_N_count"]/all_NS_count
+    stats_df["IO_S_per_of_all_NS"]  = stats_df["IO_S_count"]/all_NS_count
+    stats_df[ "I_N_per_of_all_NS"]  =  stats_df["I_N_count"]/all_NS_count
+    stats_df[ "I_S_per_of_all_NS"]  =  stats_df["I_S_count"]/all_NS_count
+    stats_df[ "O_N_per_of_all_NS"]  =  stats_df["O_N_count"]/all_NS_count
+    stats_df[ "O_S_per_of_all_NS"]  =  stats_df["O_S_count"]/all_NS_count
+
+    stats_df.round(4)
+    print("here is the stats array after filling")
+    print(stats_df)
+    stats_file = "{}.stats.csv".format(options.output_basename)
+    stats_df.to_csv(stats_file, index = True)
+
 def plot_results(df, **kwargs):
     print("inside plot_results")
-    print(kwargs)
+    df["TMtype"] = "NA"
+    print(df)
     inner = "sticks"
     width = 0.8
     delta = 0.05
@@ -195,6 +284,7 @@ def plot_results(df, **kwargs):
     for genenamekey in gene_lens:
         if kwargs["TM_dir"]:
             filepath = os.path.join(kwargs["TM_dir"],"{}_TM.txt".format(genenamekey))
+            #This part plots the transmembrane domains
             if os.path.exists(filepath):
                 left = 0
                 height = 0.2
@@ -207,12 +297,12 @@ def plot_results(df, **kwargs):
                                             edgecolor=(1,1,1))
                 rectangle_patches.append(rectangle1)
 
-                df = pd.read_csv(filepath, delimiter=',',
+                TM_df = pd.read_csv(filepath, delimiter=',',
                                  comment='#', header=None,
                                  names = ["gene", "tool", "type",
                                           "start", "stop"])
-                print(df)
-                for index, row in df.iterrows():
+                #print(df)
+                for index, row in TM_df.iterrows():
                     thistype = row["type"]
                     height = 0.2
                     left = row["start"]
@@ -234,6 +324,9 @@ def plot_results(df, **kwargs):
                                                         alpha=1,
                                                         edgecolor=(1,1,1))
                     rectangle_patches.append(rectangle1)
+                    #now add the info to the df to calculate stats
+                    for i in range(row["start"], row["stop"]+1):
+                        df.loc[(df["seqname"] == genenamekey) & (df["slice_start"] == i), "TMtype"] = row["type"] 
             else:
                 message = "{} does not exist".format(filepath)
                 raise(message)
@@ -253,6 +346,9 @@ def plot_results(df, **kwargs):
         patch.set_zorder(20)
         ax.add_patch(patch)
 
+    print("done plotting")
+    print(df)
+
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
@@ -261,6 +357,7 @@ def plot_results(df, **kwargs):
     ax.set_xlabel('Codon Number')
     ax.set_title('Density of nucleotide diversity')
 
+
     # Print image(s)
     print_images(
         base_output_name=kwargs["basename"],
@@ -268,6 +365,8 @@ def plot_results(df, **kwargs):
         no_timestamp=kwargs["no_timestamp"],
         dpi=kwargs["dpi"],
         transparent=kwargs["transparent"])
+
+    return df
 
 def offset_violinplot_halves(ax, delta, width, inner, direction):
     """
