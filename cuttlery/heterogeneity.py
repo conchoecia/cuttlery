@@ -151,36 +151,15 @@ def heterogeneity(options):
                  dpi=options.dpi,
                  fileform = options.fileform,
                  no_timestamp = options.no_timestamp,
-                 basename = options.output_basename)
+                 basename = options.output_basename,
+                 TM_dir = options.TM_dir)
 
 def plot_results(df, **kwargs):
-    #plt.style.use('BME163')
-    ##set the figure dimensions
-    #figWidth = 5
-    #figHeight = 6
-    #fig = plt.figure(figsize=(figWidth,figHeight))
-    ##set the panel dimensions
-    #panelWidth = 3
-    #panelHeight = 4
-    ##find the margins to center the panel in figure
-    #leftMargin = (figWidth - panelWidth)/2
-    #bottomMargin = ((figHeight - panelHeight)/2) + 0.25
-    #panel0 =plt.axes([leftMargin/figWidth, #left
-    #                 bottomMargin/figHeight,    #bottom
-    #                 panelWidth/figWidth,   #width
-    #                 panelHeight/figHeight])     #height
-    #panel0.tick_params(axis='both',which='both',\
-    #                   bottom='on', labelbottom='on',\
-    #                   left='off', labelleft='on', \
-    #                   right='off', labelright='off',\
-    #                   top='off', labeltop='off')
-    ##panel0.spines['top'].set_visible(False)
-    ##panel0.spines['right'].set_visible(False)
-    ##panel0.spines['left'].set_visible(False)
-
+    print("inside plot_results")
+    print(kwargs)
     inner = "sticks"
     width = 0.8
-    delta = 0.03
+    delta = 0.05
     final_width = width - delta
     seqnames = sorted(df['seqname'].unique())
     ax = sns.violinplot(x="piNSsite", y="seqname",
@@ -197,6 +176,7 @@ def plot_results(df, **kwargs):
     #  https://stackoverflow.com/questions/45201514/
     new_labels = [r'$\mathrm{\pi}$ N', r'$\mathrm{\pi}$ S']
     for t, l in zip(ax.legend_.texts, new_labels): t.set_text(l)
+    # this moves the violin plots away from each other a little bit.
     offset_violinplot_halves(ax, delta, final_width, inner, 'horizontal')
 
     # now that we have plotted the piN and piS distributions, plot a solid line
@@ -206,17 +186,68 @@ def plot_results(df, **kwargs):
     global_max_len = max(gene_lens.values())
     rectangle_patches = []
     #This just plots all the gene lengths as rectangles
+    print("gene lens")
+    print(gene_lens)
+    left = 0
+    bottom = 0
+    height = 0
+    width = 0
     for genenamekey in gene_lens:
-        left = 0
-        height = 0.1
-        bottom = seqnames.index(genenamekey)-(height/2)
-        width = gene_lens[genenamekey]
-        rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
-                                    linewidth=0.0,\
-                                    facecolor='black',\
-                                    alpha=1,
-                                    edgecolor=(1,1,1))
-        rectangle_patches.append(rectangle1)
+        if kwargs["TM_dir"]:
+            filepath = os.path.join(kwargs["TM_dir"],"{}_TM.txt".format(genenamekey))
+            if os.path.exists(filepath):
+                left = 0
+                height = 0.2
+                bottom = seqnames.index(genenamekey)-(height/2)
+                width = gene_lens[genenamekey]
+                rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
+                                            linewidth=0.0,\
+                                            facecolor='white',\
+                                            alpha=1,
+                                            edgecolor=(1,1,1))
+                rectangle_patches.append(rectangle1)
+
+                df = pd.read_csv(filepath, delimiter=',',
+                                 comment='#', header=None,
+                                 names = ["gene", "tool", "type",
+                                          "start", "stop"])
+                print(df)
+                for index, row in df.iterrows():
+                    thistype = row["type"]
+                    height = 0.2
+                    left = row["start"]
+                    width = row["stop"] - row["start"] + 1
+                    if thistype == "TMhelix":
+                        bottom = seqnames.index(genenamekey)-(height/2)
+                        color = "black"
+                    if thistype == "outside":
+                        height = height/4
+                        bottom = seqnames.index(genenamekey)-(height*1.5)
+                        color = "#ff00ff"
+                    if thistype == "inside":
+                        height = height/4
+                        bottom = seqnames.index(genenamekey)+(height*0.6666)
+                        color = "#3f3fff"
+                    rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
+                                                        linewidth=0.0,\
+                                                        facecolor=color,\
+                                                        alpha=1,
+                                                        edgecolor=(1,1,1))
+                    rectangle_patches.append(rectangle1)
+            else:
+                message = "{} does not exist".format(filepath)
+                raise(message)
+        else:
+            left = 0
+            height = 0.1
+            bottom = seqnames.index(genenamekey)-(height/2)
+            width = gene_lens[genenamekey]
+            rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
+                                        linewidth=0.0,\
+                                        facecolor='black',\
+                                        alpha=1,
+                                        edgecolor=(1,1,1))
+            rectangle_patches.append(rectangle1)
 
     for patch in rectangle_patches:
         patch.set_zorder(20)
