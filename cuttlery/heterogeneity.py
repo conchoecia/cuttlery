@@ -225,8 +225,8 @@ def heterogeneity(options):
     stats_df["IO_S_per_of_IO_NS"]   = stats_df["IO_S_count"]/IO_NS_count
     stats_df[ "I_N_per_of_I_NS"]    =  stats_df["I_N_count"]/I_NS_count
     stats_df[ "I_S_per_of_I_NS"]    =  stats_df["I_S_count"]/I_NS_count
-    stats_df[ "O_N_per_of_I_NS"]    =  stats_df["O_N_count"]/O_NS_count
-    stats_df[ "O_S_per_of_I_NS"]    =  stats_df["O_S_count"]/O_NS_count
+    stats_df[ "O_N_per_of_O_NS"]    =  stats_df["O_N_count"]/O_NS_count
+    stats_df[ "O_S_per_of_O_NS"]    =  stats_df["O_S_count"]/O_NS_count
     stats_df["TM_N_per_of_all_NS"]  = stats_df["TM_N_count"]/all_NS_count
     stats_df["TM_S_per_of_all_NS"]  = stats_df["TM_S_count"]/all_NS_count
     stats_df["IO_N_per_of_all_NS"]  = stats_df["IO_N_count"]/all_NS_count
