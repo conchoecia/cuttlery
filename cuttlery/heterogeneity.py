@@ -161,9 +161,15 @@ def heterogeneity(options):
                  basename = options.output_basename,
                  TM_dir = options.TM_dir)
 
+    genename_to_site_type = { seqname:{thistype:len(final_df.loc[(final_df["TMtype"] == thistype) & (final_df["seqname"] == seqname),]) for thistype in ["inside", "TMhelix", "outside"]} for seqname in list(final_df["seqname"].unique())}
+    #print("seqs sitecounts is:")
+    #print(genename_to_site_type)
+
+
     #now we get some simple stats on how many sites we observed in each domain type
     columnnames = ["I_N_count", "I_S_count", "O_N_count", "O_S_count",
-               "IO_N_count", "IO_S_count", "TM_N_count", "TM_S_count"]
+               "IO_N_count", "IO_S_count", "TM_N_count", "TM_S_count",
+               "I_sites_count", "O_sites_count", "IO_sites_count", "TM_sites_count"]
     empty_array = np.array([np.repeat(-1, len(final_df["seqname"].unique()))]*len(columnnames)).T
     stats_df = pd.DataFrame(empty_array, index = list(final_df["seqname"].unique()), columns=columnnames)
     #print("here is the empty stats array")
@@ -213,28 +219,50 @@ def heterogeneity(options):
         size = int(stats_df.loc[genenamekey, "I_S_count"]) + int(stats_df.loc[genenamekey, "O_S_count"])
         stats_df.loc[genenamekey, "IO_S_count"] = size
 
+        #I_sites_count
+        size = genename_to_site_type[genenamekey]["inside"]
+        stats_df.loc[genenamekey, "I_sites_count"] = size
+
+        #O_sites_count
+        size = genename_to_site_type[genenamekey]["outside"]
+        stats_df.loc[genenamekey, "O_sites_count"] = size
+
+        #IO_sites_count
+        size = genename_to_site_type[genenamekey]["outside"] + genename_to_site_type[genenamekey]["inside"]
+        stats_df.loc[genenamekey, "IO_sites_count"] = size
+
+        #TM_sites_count
+        size = genename_to_site_type[genenamekey]["TMhelix"]
+        stats_df.loc[genenamekey, "TM_sites_count"] = size
+
     TM_NS_count = stats_df["TM_N_count"] + stats_df["TM_S_count"]
     IO_NS_count = stats_df["IO_N_count"] + stats_df["IO_S_count"]
     all_NS_count = TM_NS_count + IO_NS_count
     I_NS_count =  stats_df["I_N_count"]  + stats_df["I_S_count"]
     O_NS_count =  stats_df["O_N_count"]  + stats_df["O_S_count"]
 
-    stats_df["TM_N_per_of_TM_NS"]   = stats_df["TM_N_count"]/TM_NS_count
-    stats_df["TM_S_per_of_TM_NS"]   = stats_df["TM_S_count"]/TM_NS_count
-    stats_df["IO_N_per_of_IO_NS"]   = stats_df["IO_N_count"]/IO_NS_count
-    stats_df["IO_S_per_of_IO_NS"]   = stats_df["IO_S_count"]/IO_NS_count
-    stats_df[ "I_N_per_of_I_NS"]    =  stats_df["I_N_count"]/I_NS_count
-    stats_df[ "I_S_per_of_I_NS"]    =  stats_df["I_S_count"]/I_NS_count
-    stats_df[ "O_N_per_of_O_NS"]    =  stats_df["O_N_count"]/O_NS_count
-    stats_df[ "O_S_per_of_O_NS"]    =  stats_df["O_S_count"]/O_NS_count
-    stats_df["TM_N_per_of_all_NS"]  = stats_df["TM_N_count"]/all_NS_count
-    stats_df["TM_S_per_of_all_NS"]  = stats_df["TM_S_count"]/all_NS_count
-    stats_df["IO_N_per_of_all_NS"]  = stats_df["IO_N_count"]/all_NS_count
-    stats_df["IO_S_per_of_all_NS"]  = stats_df["IO_S_count"]/all_NS_count
-    stats_df[ "I_N_per_of_all_NS"]  =  stats_df["I_N_count"]/all_NS_count
-    stats_df[ "I_S_per_of_all_NS"]  =  stats_df["I_S_count"]/all_NS_count
-    stats_df[ "O_N_per_of_all_NS"]  =  stats_df["O_N_count"]/all_NS_count
-    stats_df[ "O_S_per_of_all_NS"]  =  stats_df["O_S_count"]/all_NS_count
+    stats_df[ "per_of_all_O_sites_that_are_N"]  =  stats_df["O_N_count"]/stats_df["O_sites_count"]
+    stats_df[  "per_of_all_O_sites_that_are_S"]  =  stats_df["O_S_count"]/stats_df["O_sites_count"]
+
+    stats_df[ "per_of_all_I_sites_that_are_N"]  =  stats_df["I_N_count"]/stats_df["I_sites_count"]
+    stats_df[  "per_of_all_I_sites_that_are_S"]  =  stats_df["I_S_count"]/stats_df["I_sites_count"]
+
+    stats_df[ "per_of_all_IO_sites_that_are_N"]  =  stats_df["IO_N_count"]/stats_df["IO_sites_count"]
+    stats_df[ "per_of_all_IO_sites_that_are_S"]  =  stats_df["IO_S_count"]/stats_df["IO_sites_count"]
+
+    stats_df[ "per_of_all_TM_sites_that_are_N"]  =  stats_df["TM_N_count"]/stats_df["TM_sites_count"]
+    stats_df[ "per_of_all_TM_sites_that_are_S"]  =  stats_df["TM_S_count"]/stats_df["TM_sites_count"]
+
+    stats_df[ "total_sites"] = stats_df["IO_sites_count"] + stats_df["TM_sites_count"]
+
+    stats_df[ "O_Ns_comprise_what_percent_of_locus"]  =  stats_df["O_N_count"]/stats_df["total_sites"]
+    stats_df[ "O_Ss_comprise_what_percent_of_locus"]  =  stats_df["O_S_count"]/stats_df["total_sites"]
+    stats_df[ "I_Ns_comprise_what_percent_of_locus"]  =  stats_df["I_N_count"]/stats_df["total_sites"]
+    stats_df[ "I_Ss_comprise_what_percent_of_locus"]  =  stats_df["I_S_count"]/stats_df["total_sites"]
+    stats_df[ "IO_Ns_comprise_what_percent_of_locus"]  =  stats_df["IO_N_count"]/stats_df["total_sites"]
+    stats_df[ "IO_Ss_comprise_what_percent_of_locus"]  =  stats_df["IO_S_count"]/stats_df["total_sites"]
+    stats_df[ "TM_Ns_comprise_what_percent_of_locus"]  =  stats_df["IO_N_count"]/stats_df["total_sites"]
+    stats_df[ "TM_Ss_comprise_what_percent_of_locus"]  =  stats_df["IO_S_count"]/stats_df["total_sites"]
 
     stats_df.round(4)
     print("here is the stats array after filling")
@@ -345,9 +373,6 @@ def plot_results(df, **kwargs):
     for patch in rectangle_patches:
         patch.set_zorder(20)
         ax.add_patch(patch)
-
-    print("done plotting")
-    print(df)
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
