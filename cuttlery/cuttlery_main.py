@@ -324,6 +324,10 @@ def main():
                         alignments are located. Looks recursively so files can
                         be in any subdirectory. The filenames of the fasta files
                         will be used as the figure label while plotting.""")
+    parser_hetero.add_argument("--TM_dir",
+                        action = FullPaths,
+                        help = """This is the directory where the TMHMM
+                        files result files are located.""")
     parser_hetero.add_argument('--fileform',
                         dest='fileform',
                         choices=['png','pdf', 'eps', 'jpeg', 'jpg',
@@ -387,7 +391,8 @@ def main():
                                 help="""Change the dpi from the default 600
                                 if you need it higher""")
     parser_piNpiS.add_argument("--fasta_dir",
-                        action = FullPaths,
+                        action = FullPathsList,
+                        nargs = '+',
                         help = """This is the directory where the fasta file
                         alignments are located. The filename will be used as the
                         figure label while plotting.""")

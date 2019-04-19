@@ -47,7 +47,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.path import Path
 
 
-#mathy stuff
+#math
 import numpy as np
 from numpy import cumsum
 from numpy.random import rand
@@ -115,7 +115,7 @@ def random_sequence(seqs, mode = 'dominant'):
     consensus = df.iloc[:,np.random.choice(list(range(len(seqs))))]
     return consensus
 
-# I don't think I use this
+# This isn't used in the current version of the script
 def _num_mutations(row):
     unique = np.unique(row)
     num_seqs = len(row)
@@ -457,8 +457,11 @@ def pinpissim(args):
     #print_results(results_df)
     print(" - Plotting results", file = sys.stderr)
     plot_results(results_df, **vars(args))
+    print(" - swarmplot of results", file = sys.stderr)
+    piNpiS_swarmplot(results_df, **vars(args))
     print(" - Boxplot of results", file = sys.stderr)
     piNpiS_boxplot(results_df, **vars(args))
+
 
 def print_results(results, **kwargs):
     """This dataframe prints out the results of the data depending on the type.
@@ -534,7 +537,7 @@ def plot_results(results, **kwargs):
         observations =  sims.loc[sims['seqname'] == this_seqname, ]
         num_observations = len(observations)
         min_piNpiS = np.min(observations['piNpiS'])
-        num_ltet = len(observations.query("piNpiS <= {} and piNpiS > 0".format(float(observed_value))))
+        num_ltet = len(observations.query("piNpiS <= {} and piS > 0".format(float(observed_value))))
         p_val = num_ltet/num_observations
         p_values.append({'seqname': this_seqname, 'p_val': p_val})
     pval_df = pd.DataFrame.from_dict(p_values)
@@ -630,9 +633,8 @@ def plot_results(results, **kwargs):
         transparent=kwargs["transparent"])
 
 
-def piNpiS_boxplot(results, **kwargs):
+def piNpiS_swarmplot(results, **kwargs):
     print("kwargs is: \n", kwargs)
-    #plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
     figHeight = 6
@@ -669,7 +671,7 @@ def piNpiS_boxplot(results, **kwargs):
     rgba = {seqnames[i]: cmap(i/len(seqnames))
             for i in range(len(seqnames)) }
 
-    # I think this block mostly just prints the observed piNpiS values for the sequences
+    # This block mostly just prints the observed piNpiS values for the sequences
     for i in range(len(seqnames)):
         this_seqname = seqnames[i]
         observed_value = float(obs.loc[obs['seqname'] == this_seqname,'piNpiS'])
@@ -680,7 +682,7 @@ def piNpiS_boxplot(results, **kwargs):
         observations =  sims.loc[sims['seqname'] == this_seqname, ]
         num_observations = len(observations)
         min_piNpiS = np.min(observations['piNpiS'])
-        num_ltet = len(observations.query("piNpiS <= {} and piNpiS > 0".format(float(observed_value))))
+        num_ltet = len(observations.query("piNpiS <= {} and piS > 0".format(float(observed_value))))
         p_val = num_ltet/num_observations
         #print("{} observed: {}, min: {}, #ltet: {}, #obs: {}".format(this_seqname,
         #       float(observed_value), min_piNpiS, num_ltet, num_observations))
@@ -749,13 +751,110 @@ def piNpiS_boxplot(results, **kwargs):
 
     panel0.set_xlim([0, 3])
     panel0.set_xlabel(r"Efficiency of selection ($\pi N/\pi S$)")
-    panel0.set_title("Beroe forskalii mitochondrial gene\n" r"observed and simulated $\pi N/\pi S$")
+    panel0.set_title("Observed and simulated $\pi N/\pi S$")
 
 
     for point in masterPP:
         panel0.plot(point[1],point[0],marker='o',ms=2,
                     mfc=point[2], mew=0,linewidth=0,
                     alpha=0.25)
+
+    # Print image(s)
+    if kwargs["output_basename"] is None:
+        file_base = "piNpiS_swarmplot"
+    else:
+        file_base = kwargs["output_basename"] + "_swarmplot"
+    print_images(
+        base_output_name=file_base,
+        image_formats=kwargs["fileform"],
+        no_timestamp = kwargs["no_timestamp"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
+
+def piNpiS_boxplot(results, **kwargs):
+    print("kwargs is: \n", kwargs)
+    #set the figure dimensions
+    figWidth = 5
+    figHeight = 6
+    fig = plt.figure(figsize=(figWidth,figHeight))
+    #set the panel dimensions
+    panelWidth = 3
+    panelHeight = 4
+    #find the margins to center the panel in figure
+    leftMargin = (figWidth - panelWidth)/2
+    bottomMargin = ((figHeight - panelHeight)/2) + 0.25
+    panel0 =plt.axes([leftMargin/figWidth, #left
+                     bottomMargin/figHeight,    #bottom
+                     panelWidth/figWidth,   #width
+                     panelHeight/figHeight])     #height
+    panel0.tick_params(axis='both',which='both',\
+                       bottom='on', labelbottom='on',\
+                       left='off', labelleft='on', \
+                       right='off', labelright='off',\
+                       top='off', labeltop='off')
+    panel0.spines['top'].set_visible(False)
+    panel0.spines['right'].set_visible(False)
+    panel0.spines['left'].set_visible(False)
+
+
+    #panel0.set_ylim([0, max(results['piNpiS']) * 0.5])
+    panel0.set_ylim([0, 2])
+    sims = results[results['type'] == 'simulation']
+    obs = results[results['type'] == 'observed']
+    obs.sort_values(by="piNpiS", ascending = False, inplace=True)
+    obs.reset_index(inplace=True, drop = True)
+    seqnames = sorted(results['seqname'].unique(), reverse = True)
+
+    # This block mostly just prints the observed piNpiS values for the sequences
+    for i in range(len(seqnames)):
+        this_seqname = seqnames[i]
+        observed_value = float(obs.loc[obs['seqname'] == this_seqname,'piNpiS'])
+        top_y = i + 0.1 + 0.5
+        bottom_y = i + 0.9 + 0.5
+        panel0.plot([float(observed_value), float(observed_value)], [top_y, bottom_y],
+                    c =(0.88, 0.03, 0.005, 0.75), lw = 2)
+        observations =  sims.loc[sims['seqname'] == this_seqname, ]
+        num_observations = len(observations)
+        min_piNpiS = np.min(observations['piNpiS'])
+        num_ltet = len(observations.query("piNpiS <= {} and piS > 0".format(float(observed_value))))
+        p_val = num_ltet/num_observations
+        #print("{} observed: {}, min: {}, #ltet: {}, #obs: {}".format(this_seqname,
+        #       float(observed_value), min_piNpiS, num_ltet, num_observations))
+
+    #randomly sample because there are probably too many points to plot
+    #sims = sims.query('piNpiS > 0')
+    simulations = [sims.loc[sims['seqname'] == seqname, 'piNpiS'] for seqname in seqnames]
+
+    bp=panel0.boxplot(simulations, \
+                  positions=np.arange(1, len(seqnames) + 1, 1), \
+                  patch_artist=True, widths=0.5, vert = False,
+                  notch=True)
+    for box in bp['boxes']:
+        box.set(#edgecolor=(0,0,0,0.5),
+                facecolor="#d8d2d7",linewidth=1)
+    #for whisker in bp['whiskers']:
+    #    whisker.set(color=(0,0,0,0.25), linestyle='-',linewidth=1)
+    for median in bp['medians']:
+        median.set(color='#443968', linestyle='dotted',linewidth=1)
+    #for flier in bp['fliers']:
+    #    flier.set(markersize=0)
+    #for cap in bp['caps']:
+    #    cap.set(lw=0)
+
+    #fig.set_size_inches(4, 6, forward=True)
+
+    # this is here because I need to align the tick labels
+    # https://stackoverflow.com/questions/15882249/
+    plt.draw()
+    panel0.set_yticklabels(seqnames)
+    yax = panel0.get_yaxis()
+    # find the maximum width of the label on the major ticks
+    pad = max(T.label.get_window_extent().width for T in yax.majorTicks)
+    yax.set_tick_params(pad=pad/3)
+
+    panel0.set_xlim([0, 3])
+    panel0.set_xlabel(r"Efficiency of selection ($\pi N/\pi S$)")
+    panel0.set_title("Observed and simulated $\pi N/\pi S$")
 
     # Print image(s)
     if kwargs["output_basename"] is None:
