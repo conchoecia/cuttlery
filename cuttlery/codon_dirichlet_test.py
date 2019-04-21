@@ -48,6 +48,7 @@ import sys
 import random
 from Bio import SeqIO
 from builtins import range
+from scipy import stats
 import progressbar
 import numpy as np
 import matplotlib
@@ -683,60 +684,67 @@ def dirichlet(args):
     chunksize = 60 # this is the optimum chunk size for parallelization
     # If we've already done an analysis and the file is there already
     #  don't bother to do it again, but instead just plot
+    seqsize = {}
+    print("""{} - Couldn't find the results file, {}""".format(
+        timestamp(), results_file), file = outfile)
+    print("""{} - Starting analysis""".format(
+        timestamp()), file = outfile)
+    print("""{} - Looking for coding, noncoding, test fasta directories.""".format(
+        timestamp()), file = outfile)
+    # check that the test_dir, coding dir, and noncoding dir exist and that
+    # they have fasta files inside
+    for dir_type, check_dir in (("noncoding_dir", options.noncoding_dir),
+                      ("test_dir", options.test_dir),
+                      ("coding_dir", options.coding_dir)):
+        if not os.path.isdir(check_dir):
+            raise IOError("""Your results file {} didn't exist so cuttlery dirichlet looked
+            for the fasta files for analysis. We couldn't find the {}: {}.
+            Please make sure that this directory exists.""".format(
+                results_file, dir_type, check_dir))
+    ##first generate a list of individuals of the sequence to test
+    print("""{} - Processing test sequences.""".format(timestamp()), file = outfile)
+    testseqs_dict = gen_codingseqs_dict(options.test_dir)
+    #Then get a list of the known sequences
+    print("""{} - Processing known coding sequences.""".format(timestamp()), file = outfile)
+    codingseqs_dict = gen_codingseqs_dict(options.coding_dir)
+    print("""{} - Processing noncoding sequences and generating pseudocodons.""".format(timestamp()), file = outfile)
+    ncseqs_dict = gen_noncodingseq_dict(options.noncoding_dir)
+
+    print("""{} - Calculating the combination space.""".format(timestamp()), file = outfile)
+    cspace = _calculate_combination_space(ncseqs_dict, codingseqs_dict, testseqs_dict)
+    print("""{} - There are {:,} individuals.""".format(
+        len(timestamp())*" ", cspace["num_individuals"]), file = outfile)
+    print("""{} - There are {:,} coding loci.""".format(
+        len(timestamp())*" ", cspace["num_coding_loci"]), file = outfile)
+    print("""{} - There are {:,} noncoding loci.""".format(
+        len(timestamp())*" ", cspace["num_nc_loci"]), file = outfile)
+    print("""{} - There are {:,} test loci.""".format(
+        len(timestamp())*" ", cspace["num_test_loci"]), file = outfile)
+    print("""{} - There are {:,} combinations for LOO independent analyses.""".format(
+        len(timestamp())*" ", cspace["LOO_independent"]), file = outfile)
+    print("""{} - There are {:,} combinations for LOO nonindependent analyses.""".format(
+        len(timestamp())*" ", cspace["LOO_nonindependent"]), file = outfile)
+    print("""{} - There are {:,} combinations for test independent analyses.""".format(
+        len(timestamp())*" ", cspace["test_independent"]), file = outfile)
+    print("""{} - There are {:,} combinations for test nonindependent analyses.""".format(
+        len(timestamp())*" ", cspace["test_nonindependent"]), file = outfile)
+
+    # then get the list of lists of noncoding sequences.
+    # We first have to pass the argument of how many copies of each gene there
+    #  are so that the program adds the sequences in groups, this determines how many
+    #  sequences to add in each sublist.
+    results_dict_list = []
+    seqs_dicts_args = {'testseqs_dict': testseqs_dict,
+                       'codingseqs_dict': codingseqs_dict,
+                       'ncseqs_dict': ncseqs_dict,
+                       'n_iterations': chunksize}
+
+    #get the mean sequence size
+    for thisdict in [testseqs_dict, codingseqs_dict, ncseqs_dict]:
+        for k in thisdict:
+            seqsize[k] = np.mean([len(seq) for seq in thisdict[k]])
+
     if not os.path.exists(results_file):
-        print("""{} - Couldn't find the results file, {}""".format(
-            timestamp(), results_file), file = outfile)
-        print("""{} - Starting analysis""".format(
-            timestamp()), file = outfile)
-        print("""{} - Looking for coding, noncoding, test fasta directories.""".format(
-            timestamp()), file = outfile)
-        # check that the test_dir, coding dir, and noncoding dir exist and that
-        # they have fasta files inside
-        for dir_type, check_dir in (("noncoding_dir", options.noncoding_dir),
-                          ("test_dir", options.test_dir),
-                          ("coding_dir", options.coding_dir)):
-            if not os.path.isdir(check_dir):
-                raise IOError("""Your results file {} didn't exist so cuttlery dirichlet looked
-                for the fasta files for analysis. We couldn't find the {}: {}.
-                Please make sure that this directory exists.""".format(
-                    results_file, dir_type, check_dir))
-        ##first generate a list of individuals of the sequence to test
-        print("""{} - Processing test sequences.""".format(timestamp()), file = outfile)
-        testseqs_dict = gen_codingseqs_dict(options.test_dir)
-        #Then get a list of the known sequences
-        print("""{} - Processing known coding sequences.""".format(timestamp()), file = outfile)
-        codingseqs_dict = gen_codingseqs_dict(options.coding_dir)
-        print("""{} - Processing noncoding sequences and generating pseudocodons.""".format(timestamp()), file = outfile)
-        ncseqs_dict = gen_noncodingseq_dict(options.noncoding_dir)
-
-        print("""{} - Calculating the combination space.""".format(timestamp()), file = outfile)
-        cspace = _calculate_combination_space(ncseqs_dict, codingseqs_dict, testseqs_dict)
-        print("""{} - There are {:,} individuals.""".format(
-            len(timestamp())*" ", cspace["num_individuals"]), file = outfile)
-        print("""{} - There are {:,} coding loci.""".format(
-            len(timestamp())*" ", cspace["num_coding_loci"]), file = outfile)
-        print("""{} - There are {:,} noncoding loci.""".format(
-            len(timestamp())*" ", cspace["num_nc_loci"]), file = outfile)
-        print("""{} - There are {:,} test loci.""".format(
-            len(timestamp())*" ", cspace["num_test_loci"]), file = outfile)
-        print("""{} - There are {:,} combinations for LOO independent analyses.""".format(
-            len(timestamp())*" ", cspace["LOO_independent"]), file = outfile)
-        print("""{} - There are {:,} combinations for LOO nonindependent analyses.""".format(
-            len(timestamp())*" ", cspace["LOO_nonindependent"]), file = outfile)
-        print("""{} - There are {:,} combinations for test independent analyses.""".format(
-            len(timestamp())*" ", cspace["test_independent"]), file = outfile)
-        print("""{} - There are {:,} combinations for test nonindependent analyses.""".format(
-            len(timestamp())*" ", cspace["test_nonindependent"]), file = outfile)
-
-        # then get the list of lists of noncoding sequences.
-        # We first have to pass the argument of how many copies of each gene there
-        #  are so that the program adds the sequences in groups, this determines how many
-        #  sequences to add in each sublist.
-        results_dict_list = []
-        seqs_dicts_args = {'testseqs_dict': testseqs_dict,
-                           'codingseqs_dict': codingseqs_dict,
-                           'ncseqs_dict': ncseqs_dict,
-                           'n_iterations': chunksize}
 
         # %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         #
@@ -780,6 +788,9 @@ def dirichlet(args):
     plot_results_simple(results_df, **vars(options))
     print("""{} - Plotting with all genes overlaid.""".format(timestamp()), file = outfile)
     plot_results(results_df, **vars(options))
+    print("""{} - Plotting violinplots with locus size.""".format(timestamp()), file = outfile)
+    plot_results_size(results_df, seqsize, **vars(options))
+
 
     # now output statistics about the data
     print("""{} - Calculating the confusion matrix.""".format(timestamp()), file = outfile)
@@ -1160,6 +1171,136 @@ def _sorted_by_mean_ll(genenames, df, sorton, **kwargs):
     sorted_values = sorted(gene_mean_dict, key = gene_mean_dict.get,
                            reverse = kwargs.get("decreasing"))
     return sorted_values
+
+def plot_results_size(results, seqsize, **kwargs):
+    """
+    Author:
+    - Darrin T Schultz (github@conchoecia)
+    """
+    #set the figure dimensions
+    figWidth = 5
+    figHeight = 4
+    plt.figure(figsize=(figWidth,figHeight))
+    #set the panel dimensions
+    panelWidth = 4
+    panelHeight = 2.5
+    #find the margins to center the panel in figure
+    leftMargin = (figWidth - panelWidth)/2
+    bottomMargin = ((figHeight - panelHeight)/2)
+    panel0 =plt.axes([leftMargin/figWidth, #left
+                     bottomMargin/figHeight,    #bottom
+                     panelWidth/figWidth,   #width
+                     panelHeight/figHeight])     #height
+    panel0.tick_params(axis='both',which='both',\
+                       bottom='on', labelbottom='on',\
+                       left='on', labelleft='on', \
+                       right='off', labelright='off',\
+                       top='off', labeltop='off')
+    panel0.spines['top'].set_visible(False)
+    panel0.spines['right'].set_visible(False)
+    #panel0.spines['left'].set_visible(False)
+
+    # Get the seqnames and organize somehow
+    seqnames = sorted(results['seqname'].unique())
+
+    # Subset the dataframes to separate the noncoding seqs, et cetera.
+    #  This makes them easier to process.
+    noncodings = results[results['real_val'] == 'noncoding']
+    codings = results[results['real_val'] == 'coding']
+    tests = results[results['analysis_type'] == 'test']
+
+    # Get the seqnames and organize somehow
+    noncoding_seqnames = sorted(noncodings['seqname'].unique())
+    coding_seqnames = sorted(codings['seqname'].unique())
+    tests_seqnames = sorted(tests['seqname'].unique())
+    colortypes = {"noncoding": "red",
+                  "coding": "blue",
+                  "test": "black"}
+
+    seqname_to_type = {}
+    for thisname in noncoding_seqnames:
+        seqname_to_type[thisname] = "noncoding"
+    for thisname in coding_seqnames:
+        seqname_to_type[thisname] = "coding"
+    for thisname in tests_seqnames:
+        seqname_to_type[thisname] = "test"
+
+    # make a list of every gene's ll_ratios given the sort order we have just
+    #  selected
+    data_lists = [list(results.loc[results['seqname'] == seqname, 'll_ratio']) for
+                  seqname in seqnames]
+    data_lists_to_color_type = [colortypes[seqname_to_type[seqname]] for
+                  seqname in seqnames]
+
+    if kwargs.get("debug"):
+        print(seqnames)
+
+    positions = []
+    print(seqnames)
+    print(seqsize)
+    for thisname in seqnames:
+        positions.append(seqsize[thisname])
+    xmax = np.max([seqsize[thisseq] for thisseq in seqnames])
+
+    nc=panel0.violinplot(data_lists,
+                  positions=positions,
+                  widths=xmax/80, vert = True,
+                  showmeans=False,showmedians=False,showextrema=False,
+                  bw_method=0.05)
+    for i in range(len(nc['bodies'])):
+        nc['bodies'][i].set_facecolor(data_lists_to_color_type[i])
+        nc['bodies'][i].set_alpha(0.75)
+        nc['bodies'][i].set_linewidth(0)
+
+    # this plots the seqnames above the text
+    for i in range(len(seqnames)):
+        text =  seqnames[i]
+        x = seqsize[text]
+        y = np.mean(data_lists[i])
+        text = "     " + text
+        panel0.text(x, y, text, fontsize=4,
+                    withdash=False,
+                    ha='left', va='center',
+                    color=(0,0,0,0.75))
+
+    # now make a vector of x's and llvals for linear fit
+    xs = []
+    ys = []
+    for i in range(len(seqnames)):
+        xs = xs + [seqsize[seqnames[i]]]*len(data_lists[i])
+        ys = ys + data_lists[i]
+
+    # Generated linear fit
+    slope, intercept, r_value, p_value, std_err = stats.linregress(xs,ys)
+    print("slope: {}".format(slope))
+    print("intercept: {}".format(intercept))
+    print("r_value: {}".format(r_value))
+    print("p_value: {}".format(p_value))
+    print("std_err: {}".format(std_err))
+    xvals = np.array(panel0.get_xlim())
+    yvals = intercept + slope * xvals
+    panel0.plot(xvals, yvals, '--')
+
+    #panel0.set_ylim([len(data_lists), -1 ])
+    #plt.gca().invert_yaxis()
+    ymin  = results['ll_ratio'].min() * 1.1
+    ymax = results['ll_ratio'].max() * 1.1
+    #ax_width = abs(xmax - xmin)
+    panel0.set_ylim(ymin, ymax)
+
+    panel0.set_ylabel("Log-likelihood ratio")
+    panel0.set_xlabel("Locus size")
+    panel0.set_title("Codon Usage Log-likelihood Ratios")
+
+    #plt.show()
+    # Print image(s)
+    print_images(
+        base_output_name= kwargs["output_basename"] + "_violins_size",
+        image_formats=kwargs["fileform"],
+        dpi=kwargs["dpi"],
+        no_timestamp = kwargs["no_timestamp"],
+        transparent=kwargs["transparent"])
+
 
 def plot_left_facing_bracket(panel, xmaxes, ymaxes, ymins, ax_width, text):
     """
