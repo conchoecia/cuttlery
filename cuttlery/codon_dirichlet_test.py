@@ -791,7 +791,6 @@ def dirichlet(args):
     print("""{} - Plotting violinplots with locus size.""".format(timestamp()), file = outfile)
     plot_results_size(results_df, seqsize, **vars(options))
 
-
     # now output statistics about the data
     print("""{} - Calculating the confusion matrix.""".format(timestamp()), file = outfile)
     real_val = results_df.loc[results_df['analysis_type'] == 'LOO', 'real_val']
@@ -1263,23 +1262,58 @@ def plot_results_size(results, seqsize, **kwargs):
                     ha='left', va='center',
                     color=(0,0,0,0.75))
 
-    # now make a vector of x's and llvals for linear fit
+    # LINEAR FIT FOR CODING POINTS
+    xs = []
+    ys = []
+    for i in range(len(seqnames)):
+        if seqnames[i] in coding_seqnames:
+            xs = xs + [seqsize[seqnames[i]]]*len(data_lists[i])
+            ys = ys + data_lists[i]
+    c_slope, c_intercept, c_r_value, c_p_value, c_std_err = stats.linregress(xs,ys)
+    print("coding slope: {}".format(c_slope))
+    print("coding intercept: {}".format(c_intercept))
+    print("coding r_value: {}".format(c_r_value))
+    print("coding p_value: {}".format(c_p_value))
+    print("coding std_err: {}".format(c_std_err))
+    print()
+    xvals = np.array(panel0.get_xlim())
+    yvals = c_intercept + c_slope * xvals
+    panel0.plot(xvals, yvals, '--', color = "blue", lw = 1)
+
+    # LINEAR FIT FOR NONCODING POINTS
+    xs = []
+    ys = []
+    for i in range(len(seqnames)):
+        if seqnames[i] in noncoding_seqnames:
+            xs = xs + [seqsize[seqnames[i]]]*len(data_lists[i])
+            ys = ys + data_lists[i]
+    nc_slope, nc_intercept, nc_r_value, nc_p_value, nc_std_err = stats.linregress(xs,ys)
+    print("noncoding slope: {}".format(nc_slope))
+    print("noncoding intercept: {}".format(nc_intercept))
+    print("noncoding r_value: {}".format(nc_r_value))
+    print("noncoding p_value: {}".format(nc_p_value))
+    print("noncoding std_err: {}".format(nc_std_err))
+    print()
+    xvals = np.array(panel0.get_xlim())
+    yvals = nc_intercept + nc_slope * xvals
+    panel0.plot(xvals, yvals, '--', color = "red", lw = 1)
+
+    # LINEAR FIT FOR ALL POINTS
     xs = []
     ys = []
     for i in range(len(seqnames)):
         xs = xs + [seqsize[seqnames[i]]]*len(data_lists[i])
         ys = ys + data_lists[i]
-
-    # Generated linear fit
     slope, intercept, r_value, p_value, std_err = stats.linregress(xs,ys)
     print("slope: {}".format(slope))
     print("intercept: {}".format(intercept))
     print("r_value: {}".format(r_value))
     print("p_value: {}".format(p_value))
     print("std_err: {}".format(std_err))
+    print()
     xvals = np.array(panel0.get_xlim())
     yvals = intercept + slope * xvals
-    panel0.plot(xvals, yvals, '--')
+    panel0.plot(xvals, yvals, '--', color = "black", lw = 1)
 
     #panel0.set_ylim([len(data_lists), -1 ])
     #plt.gca().invert_yaxis()
@@ -1287,7 +1321,6 @@ def plot_results_size(results, seqsize, **kwargs):
     ymax = results['ll_ratio'].max() * 1.1
     #ax_width = abs(xmax - xmin)
     panel0.set_ylim(ymin, ymax)
-
     panel0.set_ylabel("Log-likelihood ratio")
     panel0.set_xlabel("Locus size")
     panel0.set_title("Codon Usage Log-likelihood Ratios")
@@ -1301,6 +1334,17 @@ def plot_results_size(results, seqsize, **kwargs):
         no_timestamp = kwargs["no_timestamp"],
         transparent=kwargs["transparent"])
 
+    # Now we calculate the percent of the LLs above the line
+    print("seq\tper_above_coding_linear\tper_below_noncoding_linear")
+    for i in range(len(seqnames)):
+        thisname = seqnames[i]
+        seqlen = seqsize[thisname]
+        coding_val = c_intercept + c_slope * seqlen
+        noncoding_val = nc_intercept + nc_slope * seqlen
+        per_above_coding = len([val for val in data_lists[i] if val >= coding_val])/len(data_lists[i])*100
+        per_below_ncoding = len([val for val in data_lists[i] if val <= noncoding_val])/len(data_lists[i])*100
+        print("{}\t{}\t{}".format(thisname, per_above_coding, per_below_ncoding))
+    print()
 
 def plot_left_facing_bracket(panel, xmaxes, ymaxes, ymins, ax_width, text):
     """
