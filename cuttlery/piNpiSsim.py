@@ -215,7 +215,7 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
     # the consensus sequence as codons
     #now, all of the mutable data will be in seqs_matrix
     seqs_matrix = [[list(consensus[x:x+3]) for x in range(0, len("".join(consensus)), 3)]
-                for n in range(num_seqs_to_generate)]
+                   for n in range(num_seqs_to_generate)]
     seqs_matrix_orig = copy.deepcopy(seqs_matrix)
     ## the codon map turns the absolute index of a nucleotide position into a list of tuples.
     ##  where the 0th element of the tuple is ith codon index to get the codon
@@ -225,10 +225,11 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
     # the mutation map is used to keep track of sites
     mutation_map = [[' '  for i in range(len("".join(consensus)))]
                     for n in range(num_seqs_to_generate)]
-    # this is important and randomly chooses sites in the sequence to mutate randomly
+    # this randomly generates a list of sites in the sequence to mutate
     random_sites = list(range(len(consensus)))
     np.random.shuffle(random_sites)
     random_iterator = iter(random_sites)
+
     #this block makes a list of all possible mutations given the 0th element
     ref_base_to_possible_mutations = {}
     for this_base in ['G','A','T','C']:
@@ -259,6 +260,7 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
         mutation_dict = {}
         successful_mutation = []
         ref_base = seqs_matrix[0][this_codon_ix][this_codon_pos_ix]
+        original_codon = seqs_matrix[0][this_codon_ix]
         mutations_dict = np.random.choice(ref_base_to_possible_mutations[ref_base])
         all_new_codons = []
         for j in range(1, len(this_mut_profile)):
@@ -274,21 +276,25 @@ def mutate_consensus(consensus, mutation_profile, codon_table):
             new_codon[this_codon_pos_ix] = new_base
             all_new_codons.append(new_codon)
             #seqs_matrix[j][this_codon_ix][this_codon_pos_ix] = new_base
-            if 'mutate' in options.debug:
-                   print("{} to {}".format(this_base, new_base))
             # if this new codon isn't in the stop_codons, proceed
-            if 'mutate' in options.debug:
-                   if "".join(seqs_matrix[j][this_codon_ix]) in codon_table.stop_codons:
-                       print("accidentally a stop codon: {}".format(seqs_matrix[j][this_codon_ix]))
             if "".join(new_codon) not in codon_table.stop_codons:
                 successful_mutation.append(True)
+                if 'mutate' in options.debug:
+                       print("{} to {}".format(this_base, new_base))
             else:
                 #we don't do anything since we've implemented a base-wise change
                 successful_mutation.append(False)
+                if 'mutate' in options.debug:
+                       if "".join(seqs_matrix[j][this_codon_ix]) in codon_table.stop_codons:
+                           print("accidentally a stop codon: {}".format(seqs_matrix[j][this_codon_ix]))
+
         # if all the elements in successful_mutation are true, we can safely add
         #  the new mutations to the original sequence and move to the next
         #  random site
         if 'mutate' in options.debug:
+            print("original codon: ", end="")
+            print(codon_map[random_site_index])
+            print("new codons: ", end="")
             print(all_new_codons)
         if sum(successful_mutation) == len(successful_mutation):
             for j in range(1, len(this_mut_profile)):
@@ -534,12 +540,13 @@ def plot_results(results, **kwargs):
     p_values = []
     for this_seqname in seqnames:
         observed_value = obs.loc[obs['seqname'] == this_seqname,'piNpiS']
+        pi = obs.loc[obs['seqname'] == this_seqname,'pi']
         observations =  sims.loc[sims['seqname'] == this_seqname, ]
-        num_observations = len(observations)
+        num_observations = len(observations.query("piS > 0".format(float(observed_value))))
         min_piNpiS = np.min(observations['piNpiS'])
         num_ltet = len(observations.query("piNpiS <= {} and piS > 0".format(float(observed_value))))
         p_val = num_ltet/num_observations
-        p_values.append({'seqname': this_seqname, 'p_val': p_val})
+        p_values.append({'seqname': this_seqname, 'p_val': p_val, 'pi': float(pi), 'piNpiS': float(observed_value)})
     pval_df = pd.DataFrame.from_dict(p_values)
 
     if kwargs["output_basename"] is None:
@@ -828,7 +835,7 @@ def piNpiS_boxplot(results, **kwargs):
     bp=panel0.boxplot(simulations, \
                   positions=np.arange(1, len(seqnames) + 1, 1), \
                   patch_artist=True, widths=0.5, vert = False,
-                  notch=True)
+                  notch=True, whis=[5, 95])
     for box in bp['boxes']:
         box.set(#edgecolor=(0,0,0,0.5),
                 facecolor="#d8d2d7",linewidth=1)
@@ -852,7 +859,7 @@ def piNpiS_boxplot(results, **kwargs):
     pad = max(T.label.get_window_extent().width for T in yax.majorTicks)
     yax.set_tick_params(pad=pad/3)
 
-    panel0.set_xlim([0, 3])
+    panel0.set_xlim([0, 4])
     panel0.set_xlabel(r"Efficiency of selection ($\pi N/\pi S$)")
     panel0.set_title("Observed and simulated $\pi N/\pi S$")
 
