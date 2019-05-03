@@ -96,14 +96,6 @@ stops = ['TAA','TAG']
 global analyses
 analyses = set()
 
-#This class is used in argparse to expand the ~. This avoids errors caused on
-# some systems.
-class FullPaths(argparse.Action):
-    """Expand user- and relative-paths"""
-    def __call__(self, parser, namespace, values, option_string=None):
-        setattr(namespace, self.dest,
-                os.path.abspath(os.path.expanduser(values)))
-
 def parallel_process(array, function, n_jobs=2, use_kwargs=False, front_num=3):
     """
         A parallel version of the map function with a progress bar.
@@ -238,6 +230,8 @@ def codon_dirichlet_log_likelihood_ratio(test_seq, seq_list_1, seq_list_2,
     of the test sequence more closely matches the trinucleotide frequency of
     hypothesis sequence list 1 or hypothesis sequence list 2.
 
+    Ambiguities will be skipped over
+
     Parameters:
      <test_seq>
      <seq_list_1>
@@ -250,17 +244,12 @@ def codon_dirichlet_log_likelihood_ratio(test_seq, seq_list_1, seq_list_2,
     - Jordan M Eizenga (github@jeizenga)
     """
     # check for data invariants
+    #  nt invariants in codons are not added later
     assert len(test_seq) % 3 == 0
-    for nt in test_seq:
-        assert nt in nts
     for seq in seq_list_1:
         assert len(seq) % 3 == 0
-        for nt in seq:
-            assert nt in nts
     for seq in seq_list_2:
         assert len(seq) % 3 == 0
-        for nt in seq:
-            assert nt in nts
 
     # count up codons
     codon_counts_1 = collections.Counter()
@@ -272,11 +261,21 @@ def codon_dirichlet_log_likelihood_ratio(test_seq, seq_list_1, seq_list_2,
 
     for seq in seq_list_1:
         for codon in gen_codons(seq):
-            codon_counts_1[codon] += 1
+            add = True
+            for nt in codon:
+                if nt not in nts:
+                    add = False
+            if add:
+                codon_counts_1[codon] += 1
 
     for seq in seq_list_2:
         for codon in gen_codons(seq):
-            codon_counts_2[codon] += 1
+            add = True
+            for nt in codon:
+                if nt not in nts:
+                    add = False
+            if add:
+                codon_counts_2[codon] += 1
 
     # compute bayes factor
     log_likelihood_ratio = dirichlet_log_marginal_likelihood(codon_counts_test, codon_counts_1, pseudocounts) \
@@ -544,10 +543,10 @@ def LOO_analysis_chunk(args):
             test_gene_name = np.random.choice(dict_keys)
             other_gene_names = [x for x in dict_keys if x != test_gene_name]
             random_test_seq = np.random.choice(ncseqs_dict[test_gene_name])
-            coding_seqlist = [np.random.choice(ncseqs_dict[genename])
-                              for genename in other_gene_names]
-            nc_seqlist = [np.random.choice(codingseqs_dict[genename])
-                          for genename in codingseqs_dict]
+            coding_seqlist = [np.random.choice(codingseqs_dict[genename])
+                              for genename in codingseqs_dict]
+            nc_seqlist = [np.random.choice(ncseqs_dict[genename])
+                          for genename in other_gene_names]
 
         log_likelihood_ratio = codon_dirichlet_log_likelihood_ratio(random_test_seq,
                                     coding_seqlist, nc_seqlist, pseudocounts = 0.1,
@@ -647,7 +646,7 @@ def _calculate_combination_space(noncoding_dict, coding_dict,
     - Darrin T Schultz (github@conchoecia)
     """
     results_dict = {}
-    results_dict["num_individuals"]     = len(test_dict[random.choice(list(test_dict.keys()))])
+    results_dict["num_individuals"]     = len(coding_dict[random.choice(list(coding_dict.keys()))])
     results_dict["num_coding_loci"]     = len(coding_dict)
     results_dict["num_nc_loci"]         = len(noncoding_dict)
     results_dict["num_test_loci"]       = len(test_dict)
@@ -675,7 +674,7 @@ def dirichlet(args):
     #First, read in the options
     global options
     options = args
-    print(options)
+    #print(options)
     ## FOR INTERNAL CONSISTENCY, ANY SET_1 IS CODING and SET_2 is NONCODING!
     results_file = options.results_file
     if results_file == None:
@@ -693,9 +692,11 @@ def dirichlet(args):
         timestamp()), file = outfile)
     # check that the test_dir, coding dir, and noncoding dir exist and that
     # they have fasta files inside
-    for dir_type, check_dir in (("noncoding_dir", options.noncoding_dir),
-                      ("test_dir", options.test_dir),
-                      ("coding_dir", options.coding_dir)):
+    look_at_these = [["noncoding_dir", options.noncoding_dir],
+                     ["coding_dir", options.coding_dir]]
+    if options.test_dir != None:
+        look_at_these.append(["test_dir", options.test_dir])
+    for dir_type, check_dir in look_at_these:
         if not os.path.isdir(check_dir):
             raise IOError("""Your results file {} didn't exist so cuttlery dirichlet looked
             for the fasta files for analysis. We couldn't find the {}: {}.
@@ -703,7 +704,10 @@ def dirichlet(args):
                 results_file, dir_type, check_dir))
     ##first generate a list of individuals of the sequence to test
     print("""{} - Processing test sequences.""".format(timestamp()), file = outfile)
-    testseqs_dict = gen_codingseqs_dict(options.test_dir)
+    if options.test_dir != None:
+        testseqs_dict = gen_codingseqs_dict(options.test_dir)
+    else:
+        testseqs_dict = {}
     #Then get a list of the known sequences
     print("""{} - Processing known coding sequences.""".format(timestamp()), file = outfile)
     codingseqs_dict = gen_codingseqs_dict(options.coding_dir)
@@ -1277,6 +1281,7 @@ def plot_results_size(results, seqsize, **kwargs):
     print("coding std_err: {}".format(c_std_err))
     print()
     xvals = np.array(panel0.get_xlim())
+    xvals[0] = 0
     yvals = c_intercept + c_slope * xvals
     panel0.plot(xvals, yvals, '--', color = "blue", lw = 1)
 
@@ -1295,25 +1300,28 @@ def plot_results_size(results, seqsize, **kwargs):
     print("noncoding std_err: {}".format(nc_std_err))
     print()
     xvals = np.array(panel0.get_xlim())
+    xvals[0] = 0
     yvals = nc_intercept + nc_slope * xvals
     panel0.plot(xvals, yvals, '--', color = "red", lw = 1)
 
-    # LINEAR FIT FOR ALL POINTS
-    xs = []
-    ys = []
-    for i in range(len(seqnames)):
-        xs = xs + [seqsize[seqnames[i]]]*len(data_lists[i])
-        ys = ys + data_lists[i]
-    slope, intercept, r_value, p_value, std_err = stats.linregress(xs,ys)
-    print("slope: {}".format(slope))
-    print("intercept: {}".format(intercept))
-    print("r_value: {}".format(r_value))
-    print("p_value: {}".format(p_value))
-    print("std_err: {}".format(std_err))
-    print()
-    xvals = np.array(panel0.get_xlim())
-    yvals = intercept + slope * xvals
-    panel0.plot(xvals, yvals, '--', color = "black", lw = 1)
+    # LINEAR FIT FOR test points
+    #if options.test_dir != None and len(tests_seqnames) > 1:
+    #    xs = []
+    #    ys = []
+    #    for i in range(len(seqnames)):
+    #        if seqnames[i] in tests_seqnames:
+    #            xs = xs + [seqsize[seqnames[i]]]*len(data_lists[i])
+    #            ys = ys + data_lists[i]
+    #    slope, intercept, r_value, p_value, std_err = stats.linregress(xs,ys)
+    #    print("slope: {}".format(slope))
+    #    print("intercept: {}".format(intercept))
+    #    print("r_value: {}".format(r_value))
+    #    print("p_value: {}".format(p_value))
+    #    print("std_err: {}".format(std_err))
+    #    xvals = np.array(panel0.get_xlim())
+    #    xvals[0] = 0
+    #    yvals = intercept + slope * xvals
+    #    panel0.plot(xvals, yvals, '--', color = "black", lw = 1)
 
     #panel0.set_ylim([len(data_lists), -1 ])
     #plt.gca().invert_yaxis()

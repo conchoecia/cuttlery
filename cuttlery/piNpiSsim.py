@@ -545,7 +545,9 @@ def plot_results(results, **kwargs):
         num_observations = len(observations.query("piS > 0".format(float(observed_value))))
         min_piNpiS = np.min(observations['piNpiS'])
         num_ltet = len(observations.query("piNpiS <= {} and piS > 0".format(float(observed_value))))
-        p_val = num_ltet/num_observations
+        p_val = -1
+        if num_observations > 0:
+            p_val = num_ltet/num_observations
         p_values.append({'seqname': this_seqname, 'p_val': p_val, 'pi': float(pi), 'piNpiS': float(observed_value)})
     pval_df = pd.DataFrame.from_dict(p_values)
 
@@ -641,7 +643,7 @@ def plot_results(results, **kwargs):
 
 
 def piNpiS_swarmplot(results, **kwargs):
-    print("kwargs is: \n", kwargs)
+    #print("kwargs is: \n", kwargs)
     #set the figure dimensions
     figWidth = 5
     figHeight = 6
@@ -859,10 +861,22 @@ def piNpiS_boxplot(results, **kwargs):
     pad = max(T.label.get_window_extent().width for T in yax.majorTicks)
     yax.set_tick_params(pad=pad/3)
 
-    panel0.set_xlim([0, 4])
     panel0.set_xlabel(r"Efficiency of selection ($\pi N/\pi S$)")
     panel0.set_title("Observed and simulated $\pi N/\pi S$")
 
+    # Print image(s)
+    if kwargs["output_basename"] is None:
+        file_base = "piNpiS_boxplot"
+    else:
+        file_base = kwargs["output_basename"] + "_boxplot_noxlim"
+    print_images(
+        base_output_name=file_base,
+        image_formats=kwargs["fileform"],
+        no_timestamp = kwargs["no_timestamp"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
+
+    panel0.set_xlim([0, 4])
     # Print image(s)
     if kwargs["output_basename"] is None:
         file_base = "piNpiS_boxplot"

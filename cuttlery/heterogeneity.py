@@ -126,8 +126,8 @@ def heterogeneity(options):
                 partial = sliced_codonseqs[i]
                 results = calculate_piN_piS(partial, options.method,
                                             codon_table, het = True)
-                if results['piN'] > 0:
-                    print("piN > 0: {}".format(results['piN']))
+                #if results['piN'] > 0:
+                #    print("piN > 0: {}".format(results['piN']))
                 results['pi'] = calculate_pi(partial)
                 results['seqname'] = genename
                 results['type'] = "observed"
@@ -139,10 +139,18 @@ def heterogeneity(options):
         # use boolean to mark where piN and piS do not == 0
         #results_df['piNsite'] = results_df.loc[results_df['piN'] != 0, 'slice_start']
         #results_df['piSsite'] = results_df.loc[results_df['piS'] != 0, 'slice_start']
-        results_df.loc[results_df['piN'] != 0, 'piNorS'] = 'piN'
-        results_df.loc[results_df['piS'] != 0, 'piNorS'] = 'piS'
+        results_df["piNorS"] = "unassigned"
+        for i,row in results_df.iterrows():
+            if abs(row['piN']) > abs(row['piS']):
+                results_df.loc[i, 'piNorS'] = 'piN'
+            elif abs(row['piN']) < abs(row['piS']):
+                results_df.loc[i, 'piNorS'] = 'piS'
+            else:
+                results_df.loc[i, 'piNorS'] = 'NA'
+        #results_df.loc[results_df['piN'] != 0, 'piNorS'] = 'piN'
+        #results_df.loc[results_df['piS'] != 0, 'piNorS'] = 'piS'
         results_df['piNSsite'] = results_df.query("piN != 0 or piS != 0")['slice_start']
-
+        print(results_df)
         results_df.to_csv(results_file, index = False)
     else:
         print("\nFound {} so skipping analysis\n".format(results_file))
@@ -159,6 +167,14 @@ def heterogeneity(options):
                  fileform = options.fileform,
                  no_timestamp = options.no_timestamp,
                  basename = options.output_basename,
+                 TM_dir = options.TM_dir)
+
+    final_df = plot_results_bars(results_df,
+                 transparent=options.transparent,
+                 dpi=options.dpi,
+                 fileform = options.fileform,
+                 no_timestamp = options.no_timestamp,
+                 basename = "{}_bar".format(options.output_basename),
                  TM_dir = options.TM_dir)
 
     genename_to_site_type = { seqname:{thistype:len(final_df.loc[(final_df["TMtype"] == thistype) & (final_df["seqname"] == seqname),]) for thistype in ["inside", "TMhelix", "outside"]} for seqname in list(final_df["seqname"].unique())}
@@ -270,6 +286,190 @@ def heterogeneity(options):
     stats_file = "{}.stats.csv".format(options.output_basename)
     stats_df.to_csv(stats_file, index = True)
 
+def plot_results_bars(df, **kwargs):
+    print("inside plot_results_bar")
+    df["TMtype"] = "NA"
+    print(df)
+    width = 0.8
+    delta = 0.05
+    final_width = width - delta
+    seqnames = sorted(df['seqname'].unique())
+    # now that we have plotted the piN and piS distributions, plot a solid line
+    #  indicating the whole length of the gene
+    gene_lens = {seqname:max(df.loc[df['seqname'] == seqname, 'slice_stop'])
+                 for seqname in seqnames}
+    global_max_len = max(gene_lens.values())
+
+
+    figWidth = 9
+    figHeight = 3.5
+    plt.figure(figsize=(figWidth,figHeight))
+    #set the panel dimensions
+    panelWidth = 8
+    panelHeight = 2.5
+    #find the margins to center the panel in figure
+    leftMargin = (figWidth - panelWidth)/2
+    bottomMargin = (figHeight - panelHeight)/2
+    panel0 =plt.axes([leftMargin/figWidth, #left
+                     bottomMargin/figHeight,    #bottom
+                     panelWidth/figWidth,   #width
+                     panelHeight/figHeight])     #height
+    panel0.tick_params(axis='both',which='both',\
+                       bottom='on', labelbottom='on',\
+                       left='on', labelleft='on', \
+                       right='off', labelright='off',\
+                       top='off', labeltop='off')
+    panel0.spines['top'].set_visible(False)
+    panel0.spines['right'].set_visible(False)
+    panel0.spines['left'].set_visible(False)
+
+
+    piNcolor = "#74b6a1"
+    piScolor = "#e79578"
+    rectangle_patches = []
+    add_first_patches = []
+    bar_height = 0.4
+    highlight_width = 6
+    grad_num = 50
+    grad_bar_width = highlight_width/grad_num
+    grad_bar_pos = np.linspace(0, highlight_width, grad_num)
+    alpha_index = np.linspace(0.75,0,grad_num)
+    for i,row in df.iterrows():
+        #plot the piN bars
+        if row["piNorS"] != "NA":
+            for moltype in ["piN", "piS"]:
+                if row["piNorS"] == moltype:
+                    thiscolor = "black"
+                    bottom = -10
+                    if moltype == "piN":
+                        thiscolor= piNcolor
+                        bottom = seqnames.index(row["seqname"])-bar_height
+                    else:
+                       thiscolor = piScolor
+                       bottom = seqnames.index(row["seqname"])
+                    left = row["slice_start"]
+                    rectangle1=mplpatches.Rectangle((left,bottom),1,0.4,\
+                                                    linewidth=0.0,\
+                                                    facecolor='black',\
+                                                    alpha=1,
+                                                    edgecolor=(1,1,1))
+                    rectangle_patches.append(rectangle1)
+                    for j in range(0,grad_num):
+                        thisalpha = alpha_index[j]
+                        this_offset=grad_bar_pos[j]
+                        thisleft = left - this_offset
+                        if thisleft >= 0:
+                            rectangle2=mplpatches.Rectangle((thisleft,bottom),grad_bar_width,0.4,\
+                                                            linewidth=0.0,\
+                                                            facecolor=thiscolor,\
+                                                            alpha = thisalpha,
+                                                            edgecolor=(1,1,1))
+                            add_first_patches.append(rectangle2)
+                        thisleft = left + 1 + this_offset
+                        if thisleft < gene_lens[row["seqname"]]:
+                            rectangle2=mplpatches.Rectangle((thisleft,bottom),grad_bar_width,0.4,\
+                                                            linewidth=0.0,\
+                                                            facecolor=thiscolor,\
+                                                            alpha = thisalpha,
+                                                            edgecolor=(1,1,1))
+                            add_first_patches.append(rectangle2)
+
+    #This just plots all the gene lengths as rectangles
+    print("gene lens")
+    print(gene_lens)
+    left = 0
+    bottom = 0
+    height = 0
+    width = 0
+    for genenamekey in gene_lens:
+        if kwargs["TM_dir"]:
+            filepath = os.path.join(kwargs["TM_dir"],"{}_TM.txt".format(genenamekey))
+            #This part plots the transmembrane domains
+            if os.path.exists(filepath):
+                left = 0
+                height = 0.2
+                bottom = seqnames.index(genenamekey)-(height/2)
+                width = gene_lens[genenamekey]
+                # white rectangle
+                rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
+                                            linewidth=0.0,\
+                                            facecolor='white',\
+                                            alpha=1,
+                                            edgecolor=(1,1,1))
+                rectangle_patches.append(rectangle1)
+
+                TM_df = pd.read_csv(filepath, delimiter=',',
+                                 comment='#', header=None,
+                                 names = ["gene", "tool", "type",
+                                          "start", "stop"])
+                #print(df)
+                for index, row in TM_df.iterrows():
+                    thistype = row["type"]
+                    height = 0.2
+                    left = row["start"]
+                    width = row["stop"] - row["start"] + 1
+                    if thistype == "TMhelix":
+                        bottom = seqnames.index(genenamekey)-(height/2)
+                        color = "black"
+                    if thistype == "outside":
+                        height = height/4
+                        bottom = seqnames.index(genenamekey)-(height*1.5)
+                        color = "#ff00ff"
+                    if thistype == "inside":
+                        height = height/4
+                        bottom = seqnames.index(genenamekey)+(height*0.6666)
+                        color = "#3f3fff"
+                    rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
+                                                        linewidth=0.0,\
+                                                        facecolor=color,\
+                                                        alpha=1,
+                                                        edgecolor=(1,1,1))
+                    rectangle_patches.append(rectangle1)
+                    #now add the info to the df to calculate stats
+                    for i in range(row["start"], row["stop"]+1):
+                        df.loc[(df["seqname"] == genenamekey) & (df["slice_start"] == i), "TMtype"] = row["type"] 
+            else:
+                message = "{} does not exist".format(filepath)
+                raise(message)
+        else:
+            left = 0
+            height = 0.1
+            bottom = seqnames.index(genenamekey)-(height/2)
+            width = gene_lens[genenamekey]
+            rectangle1=mplpatches.Rectangle((left,bottom),width,height,\
+                                        linewidth=0.0,\
+                                        facecolor='black',\
+                                        alpha=1,
+                                        edgecolor=(1,1,1))
+            rectangle_patches.append(rectangle1)
+
+    for patch in add_first_patches:
+        patch.set_zorder(20)
+        panel0.add_patch(patch)
+    for patch in rectangle_patches:
+        patch.set_zorder(20)
+        panel0.add_patch(patch)
+
+    panel0.set_xlim([0, global_max_len * 1.05])
+    panel0.set_ylim([len(seqnames)-0.5, -0.5])
+    panel0.set_yticks(list(range(len(seqnames))))
+    panel0.set_yticklabels(seqnames)
+
+    panel0.set_ylabel('')
+    panel0.set_xlabel('Codon Number')
+    panel0.set_title('Density of nucleotide diversity')
+
+
+    # Print image(s)
+    print_images(
+        base_output_name=kwargs["basename"],
+        image_formats=kwargs["fileform"],
+        no_timestamp=kwargs["no_timestamp"],
+        dpi=kwargs["dpi"],
+        transparent=kwargs["transparent"])
+
+    return df
+
 def plot_results(df, **kwargs):
     print("inside plot_results")
     df["TMtype"] = "NA"
@@ -279,6 +479,7 @@ def plot_results(df, **kwargs):
     delta = 0.05
     final_width = width - delta
     seqnames = sorted(df['seqname'].unique())
+    fig = plt.figure(figsize=(8,4))
     ax = sns.violinplot(x="piNSsite", y="seqname",
                   hue="piNorS", hue_order = ["piN", "piS"],
                   data=df, palette="Set2", split=True,

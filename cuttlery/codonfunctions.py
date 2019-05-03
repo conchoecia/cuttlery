@@ -255,10 +255,13 @@ def fasta_dir_to_gene_filelist(fasta_dirs, debug = False):
 def fasta_path_to_codonseqs(fasta_path, codon_table, codon_alphabet):
     codonseqs = []
     for record in SeqIO.parse(fasta_path, "fasta"):
-        this_CS = remove_stop_from_end(CodonSeq().from_seq(record.seq), codon_table)
-        this_CS.alphabet = codon_alphabet
-        this_CS.id = record.id
-        codonseqs.append(this_CS)
+        try:
+            this_CS = remove_stop_from_end(CodonSeq().from_seq(record.seq), codon_table)
+            this_CS.alphabet = codon_alphabet
+            this_CS.id = record.id
+            codonseqs.append(this_CS)
+        except:
+            pass
     return codonseqs
 
 def fasta_path_to_seqs(fasta_path, codon_table=False, codon_alphabet=False):
