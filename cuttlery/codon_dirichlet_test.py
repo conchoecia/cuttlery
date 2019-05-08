@@ -824,7 +824,6 @@ def plot_results(results, **kwargs):
     """
     if kwargs.get("debug"):
         print(results.head())
-    plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
     figHeight = 4
@@ -925,7 +924,6 @@ def plot_results_simple(results, **kwargs):
     Author:
     - Darrin T Schultz (github@conchoecia)
     """
-    plt.style.use('BME163')
     #set the figure dimensions
     figWidth = 5
     figHeight = 4

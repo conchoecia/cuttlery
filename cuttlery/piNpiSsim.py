@@ -575,8 +575,6 @@ def plot_results(results, **kwargs):
     markers = {"observed": 'o', "simulation": "*"}
     sizes = {"observed": 3, "simulation": 1}
 
-    #plt.style.use('BME163')
-
     #set the figure dimensions
     figWidth = 5
     figHeight = 5
