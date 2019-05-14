@@ -21,6 +21,9 @@
 # Tutorials on how to setup python package here:
 #   - http://python-packaging.readthedocs.io/en/latest/testing.html
 #   - https://jeffknupp.com/blog/2013/08/16/open-sourcing-a-python-project-the-right-way/
+#   - https://packaging.python.org/tutorials/distributing-packages/
+
+# Use `pip install -e .` from the git repo root dir to make an editable installation
 
 import os
 from setuptools import setup, find_packages
